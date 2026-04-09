@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Runtime workspace
+workspace/
+
+# Environment variables
+.env
+
+# Test caches
+__tests__/soak/.model-cache/
+
+node_modules/
+benchmark-runs/
