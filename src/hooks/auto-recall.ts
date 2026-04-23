@@ -199,7 +199,9 @@ async function performAutoRecallInner(params: {
     systemParts.push(`<scene-navigation>\n${sceneNavigation}\n\n${pathHint}\n</scene-navigation>`);
   }
   if (memoryLines.length > 0) {
-    systemParts.push(`<relevant-memories>\n${memoryLines.join("\n")}\n</relevant-memories>`);
+    systemParts.push(
+      `<relevant-memories>\n以下是当前对话召回的相关记忆，不代表当前任务进程，仅作为参考：\n\n${memoryLines.join("\n")}\n</relevant-memories>`
+    );
   }
 
   // Append memory tools usage guide so the agent knows how to actively
