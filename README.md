@@ -1,97 +1,98 @@
 <div align="center">
 
-<img src="./assets/images/logo.png" alt="TencentDB Agent Memory" width="880" />
+<img src="./assets/images/logo2.png" alt="TencentDB Agent Memory" width="880" />
 
-### 让 Agent 沉淀经验，让人专注创造。
+### TencentDB Agent Memory
 
-让 Agent 记住固定流程、沉淀历史经验、复用用户偏好，**把人的注意力从重复工作中释放出来，回到创造、判断和生活本身**。
+Help your Agent remember fixed workflows, accumulate past experience, and reuse user preferences — **so people can pull their attention out of repetitive work and back to creation, judgment, and life itself**.
 
 [![npm](https://img.shields.io/npm/v/@tencentdb-agent-memory/memory-tencentdb?color=blue)](https://www.npmjs.com/package/@tencentdb-agent-memory/memory-tencentdb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E=22.16-brightgreen)](https://nodejs.org/)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%3E=2026.3.13-orange)](https://github.com/openclaw/openclaw)
 ![Hermes](https://img.shields.io/badge/Hermes-Gateway-7B61FF)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/kDtHb5RW2)
 
-[效果亮点](#效果亮点) · [项目简介](#项目简介) · [特点](#特点) · [快速开始](#快速开始)
+[Highlights](#-highlights) · [Overview](#overview) · [Quick Start](#quick-start) · [Design Highlights](#-design-highlights)
 
 </div>
 
 ---
 
-## ✨ 效果亮点
+## ✨ Highlights
 
-> **TencentDB Agent Memory = 短期记忆压缩 + 长期个性化记忆。**
+> **TencentDB Agent Memory = Short-term context compression + Long-term personalized memory.**
 >
-> - **短期记忆压缩**：把长任务上下文变轻，让 Agent 不再背着全部工具日志继续推理。
-> - **长期个性化记忆**：把碎片化对话提炼为结构化记忆、场景块和用户画像。
+> - **Short-term context compression**: lighten the long-task context so the Agent no longer reasons while carrying every tool log on its back.
+> - **Long-term personalized memory**: distill fragmented conversations into structured memories, scene blocks, and user personas.
 
-**作为 OpenClaw 插件接入后**：最高节省 **61.38% Token**，通过率相对提升 **51.52%**；PersonaMem 准确率从 **48%** 提升到 **76%**。
+**Plugged into OpenClaw**, it saves up to **63.59% tokens**, lifts pass rate by **+41.18%** (relative), and pushes PersonaMem accuracy from **48%** to **76%**.
 
-| 记忆能力 | Benchmark | Clawpro 成功率 | 加插件后成功率 | 相对变化 | Clawpro Token 消耗 | 加插件后 Token 消耗 | 相对变化 |
+| Memory Capability | Benchmark | Openclaw Success | With Plugin | Relative Δ | Openclaw Tokens | With Plugin Tokens | Relative Δ |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **短期记忆** | WideSearch | 33% | **50%** | **+51.52%** | 221.31M | **85.64M** | **−61.38%** |
-| **短期记忆** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1 | **2375.4** | **−33.09%** |
-| **短期记忆** | AA-LCR | 44.0% | **47.5%** | **+7.95%** | 112.0M | **77.3M** | **−31%** |
-| **长期记忆** | PersonaMem | 48% | **76%** | **+59%** | — | — | — |
+| **Short-term** | WideSearch | 8.5% | **12%** | **+41.18%** | 174.31M | **63.46M** | **−63.59%** |
+| **Short-term** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1 | **2375.4** | **−33.09%** |
+| **Short-term** | AA-LCR | 44.0% | **47.5%** | **+7.95%** | 112.0M | **77.3M** | **−31%** |
+| **Long-term** | PersonaMem | 48% | **76%** | **+59%** | — | — | — |
 
-> 超长 Session 评测不是单题清空上下文，而是把多个任务拼接到同一个 Session 中连续执行。例如 SWE-bench 每个 Session 连续执行 50 个任务，用来模拟真实长程 Agent 的上下文累积压力。
+> These are long-session evaluations, not single-turn isolated runs. Multiple tasks are concatenated into the same session and executed back-to-back. For example, each SWE-bench session runs 50 tasks consecutively to simulate the context-accumulation pressure faced by a real long-horizon Agent.
 
 ---
 
-## 项目简介
+## Overview
 
-**Memory 不是为了让 AI 存下所有东西，而是为了让人不必重复所有事情。**
+**Memory is not about letting AI store everything — it is about freeing humans from repeating everything.**
 
-TencentDB Agent Memory 帮助 Agent 学会你的流程、保留任务上下文、复用历史经验，让人把注意力留给判断、创造和真正有价值的工作。
+TencentDB Agent Memory helps the Agent learn your workflows, retain task context, and reuse past experience, so that humans can spend their attention on judgment, creation, and work that actually matters.
 
-真实工作里，很多内容不应该被用户反复交代：固定 SOP、常用分析口径、项目背景、用户偏好等。因此，我们把这些稳定经验沉淀下来，让 Agent 在合适的时候自动复用。
+In real work, plenty of things should not need to be re-explained: fixed SOPs, common analysis conventions, project background, user preferences, and so on. We capture these stable experiences and let the Agent reuse them automatically when the moment is right.
 
-TencentDB Agent Memory 不是简单的历史记录、不可恢复的摘要，也不是单纯的 RAG。我们把记忆设计成一套分层信息管理系统：数据库负责可检索、可过滤、可召回的事实底座；文件系统负责承载可读、可编辑、可逐步展开的任务画布、场景块和用户画像。短期记忆压缩解决长任务中的过程信息过载，长期个性化记忆解决跨会话的用户理解沉淀。
+TencentDB Agent Memory is not a plain chat log, not a one-way irreversible summary, and not just RAG. We design memory as a layered information management system: the database carries the searchable, filterable, recallable factual base; the file system carries the readable, editable, progressively-disclosable task canvases, scene blocks, and user personas. Short-term compression solves in-task information overload, while long-term personalized memory solves cross-session user understanding.
 
-> **让 Agent 记住该记的，让人专注于更有价值的创造。**
+> **Let the Agent remember what should be remembered, so humans can focus on what is actually worth creating.**
 
-它由两块能力组成：
+It is built from two capabilities:
 
-### 短期记忆压缩：Mermaid无限画布 ✖️ 上下文卸载
+### Short-term Compression: Mermaid Infinite Canvas ✖️ Context Offload
 
-长任务里最占上下文的往往不是用户目标，而是工具调用产生的过程信息：搜索结果、网页正文、文件片段、测试日志、报错、diff、中间版本。TencentDB Agent Memory 会把这些完整信息卸载到外部文件，只把摘要、路径和任务状态保留在上下文附近。
+In long tasks, what eats your context window is rarely the user's goal — it is the byproducts of tool calls: search results, web page bodies, file chunks, test logs, error traces, diffs, intermediate versions. TencentDB Agent Memory offloads these full payloads to external files, keeping only summaries, paths, and task state near the active context.
 
 ```text
-工具结果
-  └─► refs/*.md               保存完整原文
-      └─► offload-*.jsonl     保存工具调用级摘要与 result_ref
-          └─► mmds/*.mmd      保存 Mermaid 任务画布
-              └─► 上下文      只注入当前任务最需要的结构化状态
+Tool result
+  └─► refs/*.md               full original payload
+      └─► offload-*.jsonl     per-tool-call summary + result_ref
+          └─► mmds/*.mmd      Mermaid task canvas
+              └─► Context     only the structured state the current task needs
 ```
 
-这里的关键不是“删掉历史”，而是“折叠历史”：Agent 平时看任务地图，需要细节时再沿着 `node_id` 和 `result_ref` 下钻到原始证据。
+The point here is not "deleting history" but "folding history": most of the time the Agent looks at the task map; when it needs detail it drills down through `node_id` and `result_ref` back to the raw evidence.
 
-### 长期个性化记忆：从信息碎片到用户画像
+### Long-term Personalized Memory: From Fragments to a User Persona
 
-跨会话记忆面对的是另一个问题：原始对话日志是低密度矿藏，里面有偏好、有事实、有情绪、有长期目标，也有大量噪音。单纯向量检索只能找到“相似片段”，很难挖出用户长期稳定的特质。
+Cross-session memory is a different problem. Raw conversation logs are a low-density ore: they contain preferences, facts, emotions, long-term goals — and a lot of noise. Plain vector retrieval can only find "similar fragments" and rarely surfaces the user's stable, long-term traits.
 
-TencentDB Agent Memory 用 L0 → L3 的金字塔管线逐层提纯：
+TencentDB Agent Memory uses an L0 → L3 pyramid pipeline to refine information layer by layer:
 
 <p align="center">
   <img src="./assets/images/memory-pyramid.png" alt="TencentDB Agent Memory L0 to L3 semantic pyramid" width="860" />
 </p>
 
-上层画像负责让 Agent “懂你”，下层记忆负责在事实细节上兜底。这样 Agent 既能有宏观判断，也能在需要时查到具体证据。
+The upper layers help the Agent "understand you"; the lower layers back it up with factual detail. The Agent gets both the high-level read and the receipts when needed.
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 1. 安装插件
+### 1. Install the plugin
 
 ```bash
 openclaw plugins install @tencentdb-agent-memory/memory-tencentdb
 openclaw gateway restart
 ```
 
-### 2. 零配置启用
+### 2. Zero-config to enable
 
-默认使用本地 `SQLite + sqlite-vec` 后端。
+Defaults to a local `SQLite + sqlite-vec` backend.
 
 ```jsonc
 // ~/.openclaw/openclaw.json
@@ -102,9 +103,9 @@ openclaw gateway restart
 }
 ```
 
-启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
+Once enabled, TencentDB Agent Memory automatically handles conversation capture, memory extraction, scene aggregation, persona generation, and recall before the next turn.
 
-### 3. 使用 TCVDB 后端（可选）
+### 3. Use the TCVDB backend (optional, requires version ≥ 0.2.0)
 
 ```jsonc
 {
@@ -119,7 +120,7 @@ openclaw gateway restart
 }
 ```
 
-### 4. 启用短期记忆压缩（可选）
+### 4. Enable short-term compression (optional, requires version ≥ 0.3.0)
 
 ```jsonc
 {
@@ -131,199 +132,199 @@ openclaw gateway restart
 }
 ```
 
-### 5. 常用命令
+### 5. Common commands
 
 ```bash
-# 导入历史对话，完整执行 L0 → L3 管线
+# Import historical conversations and run the full L0 → L3 pipeline
 openclaw memory-tdai seed --input conversations.json
 
-# SQLite 数据迁移到 TCVDB
+# Migrate SQLite data into TCVDB
 migrate-sqlite-to-tcvdb --help
 
-# 导出腾讯云向量数据库数据
+# Export data from Tencent Cloud Vector Database
 export-tencent-vdb --help
 ```
 
-完整配置见 [`CONFIGURATION.md`](./CONFIGURATION.md)，CLI 输入格式见 [`src/cli/README.md`](./src/cli/README.md)。
+See [`CONFIGURATION.md`](./CONFIGURATION.md) for full configuration. CLI input format is in [`src/cli/README.md`](./src/cli/README.md).
 
 ---
 
-## 🔧 可调参数
+## 🔧 Configurable Parameters
 
-**所有字段均有合理默认值，零配置即可跑。** 如果要调优，可以按使用深度逐层展开。
+**Every field has a sensible default — it runs with zero configuration.** When you want to tune, peel back the layers based on how deep you go.
 
 <details>
-<summary><b>🟢 Level 1 · 日常调参</b>（覆盖 90% 使用场景）</summary>
+<summary><b>🟢 Level 1 · Daily tuning</b> (covers 90% of use cases)</summary>
 
-| 字段 | 默认 | 说明 |
+| Field | Default | Description |
 | :--- | :--- | :--- |
-| `storeBackend` | `"sqlite"` | 存储后端：`sqlite` / `tcvdb` |
-| `recall.strategy` | `"hybrid"` | 召回策略：`keyword` / `embedding` / `hybrid`（RRF 融合，推荐） |
-| `recall.maxResults` | `5` | 每次召回条数 |
-| `pipeline.everyNConversations` | `5` | 每 N 轮对话触发一次 L1 记忆提取 |
-| `extraction.maxMemoriesPerSession` | `20` | 单次 L1 最多提取多少条 |
-| `persona.triggerEveryN` | `50` | 每 N 条新记忆触发用户画像生成 |
-| `offload.enabled` | `false` | 是否启用短期记忆压缩 |
+| `storeBackend` | `"sqlite"` | Storage backend: `sqlite` / `tcvdb` |
+| `recall.strategy` | `"hybrid"` | Recall strategy: `keyword` / `embedding` / `hybrid` (RRF fusion, recommended) |
+| `recall.maxResults` | `5` | Number of items returned per recall |
+| `pipeline.everyNConversations` | `5` | Trigger an L1 memory extraction every N turns |
+| `extraction.maxMemoriesPerSession` | `20` | Max memories extracted per L1 pass |
+| `persona.triggerEveryN` | `50` | Generate the user persona every N new memories |
+| `offload.enabled` | `false` | Whether to enable short-term compression |
 
 </details>
 
 <details>
-<summary><b>🟡 Level 2 · 进阶调优</b>（长任务 / 长 Session 场景）</summary>
+<summary><b>🟡 Level 2 · Advanced tuning</b> (long task / long session)</summary>
 
-| 字段 | 默认 | 说明 |
+| Field | Default | Description |
 | :--- | :--- | :--- |
-| `pipeline.enableWarmup` | `true` | Warm-up：新 session 从 1 轮起触发，每次翻倍至 N（1→2→4→…） |
-| `pipeline.l1IdleTimeoutSeconds` | `600` | 用户停止对话多久后触发 L1 |
-| `pipeline.l2MinIntervalSeconds` | `900` | 同 session 两次 L2 之间的最小间隔 |
-| `recall.timeoutMs` | `5000` | 召回超时阈值，超时跳过注入不阻塞对话 |
-| `extraction.enableDedup` | `true` | L1 向量去重 / 冲突检测 |
-| `capture.excludeAgents` | `[]` | Glob 模式排除特定 Agent（如 `bench-judge-*`） |
-| `capture.l0l1RetentionDays` | `0` | L0/L1 本地文件保留天数，`0` = 永不清理 |
-| `offload.mildOffloadRatio` | `0.5` | 温和压缩触发比例（占 context window） |
-| `offload.aggressiveCompressRatio` | `0.85` | 激进压缩触发比例 |
-| `offload.mmdMaxTokenRatio` | `0.2` | MMD 注入 token 预算比例 |
-| `bm25.language` | `"zh"` | 分词语言：`zh`（jieba） / `en` |
+| `pipeline.enableWarmup` | `true` | Warm-up: a new session triggers from turn 1, doubling each time up to N (1→2→4→…) |
+| `pipeline.l1IdleTimeoutSeconds` | `600` | Trigger L1 after the user has been idle for this many seconds |
+| `pipeline.l2MinIntervalSeconds` | `900` | Minimum interval between two L2 passes within the same session |
+| `recall.timeoutMs` | `5000` | Recall timeout; on timeout, skip injection without blocking the conversation |
+| `extraction.enableDedup` | `true` | L1 vector dedup / conflict detection |
+| `capture.excludeAgents` | `[]` | Glob patterns to exclude specific agents (e.g. `bench-judge-*`) |
+| `capture.l0l1RetentionDays` | `0` | Local retention days for L0 / L1 files; `0` = never clean up |
+| `offload.mildOffloadRatio` | `0.5` | Mild compression trigger ratio (of context window) |
+| `offload.aggressiveCompressRatio` | `0.85` | Aggressive compression trigger ratio |
+| `offload.mmdMaxTokenRatio` | `0.2` | Token budget ratio for MMD injection |
+| `bm25.language` | `"zh"` | Tokenizer language: `zh` (jieba) / `en` |
 
 </details>
 
 <details>
-<summary><b>🔴 Level 3 · 完整参数表</b>（运维 / 自定义模型 / 远程 embedding）</summary>
+<summary><b>🔴 Level 3 · Full parameter reference</b> (ops / custom models / remote embedding)</summary>
 
-完整字段、类型、约束见 [`openclaw.plugin.json`](./openclaw.plugin.json) 与 [`CONFIGURATION.md`](./CONFIGURATION.md)。
+For all fields, types, and constraints see [`openclaw.plugin.json`](./openclaw.plugin.json) and [`CONFIGURATION.md`](./CONFIGURATION.md).
 
-- `embedding.*` — 远程 embedding 服务（OpenAI 兼容 API）
-- `tcvdb.*` — 腾讯云向量数据库完整参数（含 HTTPS / 自签 CA）
-- `llm.*` — 独立 LLM 模式（绕过 OpenClaw 内置模型，用指定 API 跑 L1/L2/L3）
-- `offload.backendUrl / backendApiKey` — 将 L1/L1.5/L2/L4 offload 流程卸载到后端服务
-- `report.*` — 指标上报
+- `embedding.*` — remote embedding service (OpenAI-compatible API)
+- `tcvdb.*` — full Tencent Cloud Vector Database parameters (incl. HTTPS / self-signed CA)
+- `llm.*` — standalone LLM mode (bypass OpenClaw's built-in model and run L1/L2/L3 with a designated API)
+- `offload.backendUrl / backendApiKey` — offload the L1/L1.5/L2/L4 flow to a backend service
+- `report.*` — metrics reporting
 
 </details>
 
 ---
 
-## 🤔 方案特点
+## 🤔 Design Highlights
 
-### 1. 渐进式披露：短期压缩任务，长期沉淀用户
+### 1. Progressive disclosure: compress the task, accumulate the user
 
-TencentDB Agent Memory 的核心不是“多存一点”，而是**把信息按密度和用途分层**：
+The point of TencentDB Agent Memory is not "store more" but **layering information by density and purpose**:
 
-- **短期记忆压缩**解决“当前任务太长”的问题：把原始工具结果卸载到外部，把任务结构折叠成 Mermaid 画布。
-- **长期个性化记忆**解决“下次见面不认识你”的问题：把原始对话逐层提纯成结构化记忆、场景块和用户画像。
+- **Short-term compression** solves "the current task is too long": offload raw tool results to external storage, fold the task structure into a Mermaid canvas.
+- **Long-term personalized memory** solves "next time we meet, you don't know me": refine raw conversations layer by layer into structured memories, scene blocks, and a user persona.
 
-两者共享同一条工程逻辑：**低层保留证据，高层保留结构；平时看高层，需要时下钻到底层。**
+Both share the same engineering principle: **lower layers preserve evidence, upper layers preserve structure; you read upper layers by default and drill down only when needed.**
 
-| 方向 | 低层：保真 | 中层：组织 | 高层：压缩 / 抽象 | 目标 |
+| Direction | Lower: fidelity | Middle: organization | Upper: compression / abstraction | Goal |
 | :--- | :--- | :--- | :--- | :--- |
-| 短期记忆压缩 | `refs/*.md` 原始工具结果 | `offload-*.jsonl` 工具摘要 | `mmds/*.mmd` Mermaid 任务画布 / metadata | 长任务继续做，不被上下文拖垮 |
-| 长期个性化记忆 | L0 原始对话 | L1 结构化记忆 / L2 场景块 | L3 用户画像 `persona.md` | 下次再见面，Agent 更懂用户 |
+| Short-term compression | `refs/*.md` raw tool result | `offload-*.jsonl` tool summary | `mmds/*.mmd` Mermaid task canvas / metadata | Keep long tasks moving instead of being dragged down by context |
+| Long-term personalized memory | L0 raw conversation | L1 structured memory / L2 scene block | L3 user persona `persona.md` | Next time you show up, the Agent knows you better |
 
-这让 Agent 可以像人一样工作：先看目录，再看章节，最后才翻原始资料。上下文窗口不再是一张越堆越满的桌子，而是一张可以折叠和展开的工作台。
+This lets the Agent work the way humans do: read the table of contents first, then chapters, and only crack open the raw material when needed. The context window stops being a desk that just keeps piling up — it becomes a workspace you can fold and unfold.
 
-### 2. 长期个性化记忆：L0 → L3 语义金字塔
+### 2. Long-term memory: the L0 → L3 semantic pyramid
 
-长期记忆不是“把聊天记录存起来”这么简单。真正有价值的是从对话碎片中挖出稳定偏好、隐含目标和场景化经验。
+Long-term memory is more than "save the chat log somewhere". The real value is mining stable preferences, implicit goals, and contextualized experience out of conversational fragments.
 
-| 层级 | 产物 | 信息变化 |
+| Layer | Output | What changes |
 | :--- | :--- | :--- |
-| L0 | 原始对话 | 保留事实底座，但噪音最大、密度最低 |
-| L1 | 结构化原子记忆 | 从对话中提取干净事实，适合语义 + 时序检索 |
-| L2 | 场景块 | 将相关记忆聚合成场景，理解“在某类情境下用户如何行动” |
-| L3 | 用户画像 | 提炼长期偏好、稳定特质和决策风格，作为高密度上下文注入 |
+| L0 | Raw conversation | Preserves the factual base, but with the most noise and the lowest density |
+| L1 | Structured atomic memory | Clean facts extracted from the dialogue, suitable for semantic + temporal retrieval |
+| L2 | Scene block | Aggregates related memories into scenes — understand "how the user behaves in this kind of situation" |
+| L3 | User persona | Distills long-term preferences, stable traits, and decision style as a high-density context to inject |
 
-这套结构类似 DIKW 金字塔：从 Data 到 Information，再到 Knowledge，最后变成 Wisdom。它让 Agent 不只是回忆“用户说过什么”，而是理解“用户可能需要什么”。
+The shape mirrors a DIKW pyramid: from Data to Information to Knowledge to Wisdom. The Agent stops merely recalling "what the user said" and starts understanding "what the user might need".
 
-### 3. 宏观画像 + 微观事实：同一套下钻机制降低幻觉
+### 3. Macro persona + micro facts: one drill-down mechanism to reduce hallucination
 
-压缩最大的风险是“省了 Token，也丢了证据”。因此 TencentDB Agent Memory 没有把历史压成一段不可恢复的 summary，而是保留了从高层摘要回到底层证据的路径。
+The biggest risk of compression is "saving tokens but losing the receipts". So TencentDB Agent Memory does not collapse history into an irreversible summary — it keeps a clear path from high-level abstraction back to ground-truth evidence.
 
-| 问题类型 | 优先使用 | 继续下钻 |
+| Question type | First look at | Drill down to |
 | :--- | :--- | :--- |
-| 日常偏好、表达风格、长期目标 | L3 Persona / L2 Scene | 需要事实时查 L1 / L0 |
-| 具体事实、时间、项目细节 | L1 Memory / L0 Conversation | 命中不足时扩大时间范围或语义检索 |
-| 当前长任务继续执行 | Active MMD 任务画布 | 摘要不够时查 JSONL，再读 `refs/*.md` 原文 |
-| 历史任务恢复 | Metadata 任务入口 | 打开 MMD → 找 node_id → 追 result_ref |
+| Daily preferences, voice, long-term goals | L3 Persona / L2 Scene | Hit L1 / L0 when facts are needed |
+| Specific facts, dates, project details | L1 Memory / L0 Conversation | Widen the time range or use semantic recall when hits are sparse |
+| Continuing a long-running task | Active MMD task canvas | Check the JSONL when the summary is thin, then read `refs/*.md` for raw text |
+| Resuming a historical task | Metadata task entry | Open the MMD → find `node_id` → trace `result_ref` |
 
-上层负责“情商”和方向，下层负责“证据”和精度。短期压缩和长期记忆在这里合成一条闭环：**能折叠，也能展开；能抽象，也能追证。**
+The upper layer carries "judgment" and direction; the lower layer carries "evidence" and precision. Short-term compression and long-term memory close into one loop: **foldable and unfoldable; abstract yet auditable.**
 
-### 4. 白盒可调试：记忆不是黑盒向量
+### 4. White-box debuggable: memory is not a black-box vector
 
-很多记忆系统的问题是：召回错了，你只能看到一串向量分数，很难判断到底哪里错。TencentDB Agent Memory 把关键中间产物保存在可读文件里：
+Many memory systems break here: when recall is wrong, all you see is a list of vector scores, and you cannot tell where things went sideways. TencentDB Agent Memory keeps the key intermediates as readable files:
 
-- L2 场景块是 Markdown，可以直接打开检查。
-- L3 用户画像是 `persona.md`，可以追溯到对应场景。
-- 短期任务画布是 Mermaid，既能给人看，也能给 Agent 读。
-- 原文、摘要、节点之间有 `result_ref` 和 `node_id` 关联。
+- L2 scene blocks are Markdown — open and inspect directly.
+- L3 personas live in `persona.md` and trace back to the scenes that produced them.
+- Short-term task canvases are Mermaid — readable to humans and to Agents.
+- Raw payloads, summaries, and nodes are linked by `result_ref` and `node_id`.
 
-这意味着调试不再是翻黑盒数据库，而是沿着“画像 → 场景 → 记忆 → 原文”的链路逐层定位。
+Debugging is no longer rummaging through a black-box database — it is walking the chain "persona → scene → memory → raw text" until the issue surfaces.
 
-### 5. 异构存储解耦：数据库保事实，文件系统保结构
+### 5. Heterogeneous storage decoupled: DB for facts, file system for structure
 
-长期记忆和短期压缩看起来是两套功能，底层其实遵循同一条存储原则：**数据库负责可检索的事实，文件系统负责可读可改的结构。**
+Long-term memory and short-term compression look like two features but follow the same storage principle underneath: **the database stores searchable facts; the file system stores readable, editable structure.**
 
-| 信息类型 | 存储介质 | 为什么这样放 |
+| Information type | Storage medium | Why this placement |
 | :--- | :--- | :--- |
-| L0 / L1 长期记忆底座 | SQLite 或 TCVDB | 数据量大、需要语义检索和时序查证 |
-| L2 / L3 场景与画像 | Markdown 文件 | 需要业务可读、Prompt 可调、渐进式披露 |
-| Offload 原文 | `refs/*.md` | 原始证据必须完整保留，但不应常驻上下文 |
-| Offload 摘要 | JSONL | 方便按 `node_id` 检索工具调用历史 |
-| Offload 任务结构 | Mermaid 文件 | 让 Agent 和人都能看懂任务如何推进 |
+| L0 / L1 long-term memory base | SQLite or TCVDB | Large volume; needs semantic recall and temporal lookup |
+| L2 / L3 scenes and persona | Markdown files | Must be human-readable, prompt-tunable, progressively disclosable |
+| Offload raw payloads | `refs/*.md` | Raw evidence must be kept in full but should not live in the context |
+| Offload summaries | JSONL | Easy to look up tool-call history by `node_id` |
+| Offload task structure | Mermaid files | So both Agents and humans can see how the task is moving |
 
-底层像弹药库，负责稳定、完整、可检索；顶层像作战地图，负责灵活、可读、能快速迭代。短期压缩的画布和长期记忆的画像，本质上都是“给 Agent 看得懂的高密度工作面”。
+The lower stack is the armory: stable, complete, retrievable. The upper stack is the battle map: flexible, readable, fast to iterate. The short-term canvas and the long-term persona are both, at heart, **high-density working surfaces the Agent can read.**
 
-### 6. 工程能力完整：不是 Demo，而是可接入的插件
+### 6. Production-ready engineering: a real plugin, not a demo
 
-| 能力 | 说明 |
+| Capability | Description |
 | :--- | :--- |
-| OpenClaw 插件 | 安装后即可自动捕获、提取、召回记忆 |
-| Hermes Gateway 适配 | `TdaiCore + HostAdapter` 解耦宿主框架 |
-| 双后端 | 本地 `SQLite + sqlite-vec`，或远端 `TCVDB` |
-| 混合检索 | BM25 + 向量 + RRF，兼顾关键词和语义召回 |
-| Agent 工具 | `tdai_memory_search` / `tdai_conversation_search` |
-| 数据迁移 | 支持历史导入、SQLite → TCVDB 迁移、VDB 导出 |
+| OpenClaw plugin | Capture, extract, and recall memory automatically once installed |
+| Hermes Gateway adapter | `TdaiCore + HostAdapter` decoupled from the host framework |
+| Dual backends | Local `SQLite + sqlite-vec`, or remote `TCVDB` |
+| Hybrid retrieval | BM25 + vector + RRF — both keyword and semantic recall |
+| Agent tools | `tdai_memory_search` / `tdai_conversation_search` |
+| Data migration | Historical import, SQLite → TCVDB migration, VDB export |
 
 ---
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 | :--- | :--- |
-| [`CONFIGURATION.md`](./CONFIGURATION.md) | 完整配置参考、字段说明与高级参数 |
-| [`src/cli/README.md`](./src/cli/README.md) | `openclaw memory-tdai seed` 历史对话导入说明 |
-| [`scripts/README.memory-tencentdb-ctl.md`](./scripts/README.memory-tencentdb-ctl.md) | 运维管理工具说明 |
-| [`CHANGELOG.md`](./CHANGELOG.md) | 版本变更记录 |
-| [`openclaw.plugin.json`](./openclaw.plugin.json) | OpenClaw 插件声明与配置 Schema |
+| [`CONFIGURATION.md`](./CONFIGURATION.md) | Full configuration reference, field descriptions, and advanced parameters |
+| [`src/cli/README.md`](./src/cli/README.md) | `openclaw memory-tdai seed` historical conversation import |
+| [`scripts/README.memory-tencentdb-ctl.md`](./scripts/README.memory-tencentdb-ctl.md) | Operations & management tooling |
+| [`CHANGELOG.md`](./CHANGELOG.md) | Release notes and version history |
+| [`openclaw.plugin.json`](./openclaw.plugin.json) | OpenClaw plugin manifest and configuration schema |
 
 ---
-## 社区与贡献
 
-我们欢迎一切形式的贡献——Bug 反馈、功能建议、文档勘误、Benchmark 复现、生态集成，或者一个 Pull Request 都可以。Agent 记忆这件事远未有定论，希望和大家一起把它做出来。
+## Community & Contributing
 
-- 🐞 **发现 Bug 或有疑问？** 欢迎到 [GitHub Issues](https://github.com/<org>/<repo>/issues) 提交，我们会在 24 小时内响应。
-- 💡 **有想法想交流？** 欢迎在 [GitHub Discussions](https://github.com/<org>/<repo>/discussions) 发起讨论。
-- 🛠️ **想贡献代码？** 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
-- 💬 **想加入交流群？** 扫码加入 **Agent Memory 微信社群**，与早期开发者直接对话。
-<img width="200" height="146" alt="766450d8a7b30aa7e67121b4981f1810" src="https://github.com/user-attachments/assets/7cbbb57a-ec81-4f92-b0bd-7f3c5d760c1e" />
+We welcome every kind of contribution — bug reports, feature ideas, doc fixes, benchmark reproductions, ecosystem integrations, or a Pull Request. Agent memory is far from a solved problem, and we'd love to figure it out together.
+
+- 🐞 **Found a bug or have a question?** Open an issue at [GitHub Issues](https://github.com/<org>/<repo>/issues) — we respond within 24 hours.
+- 💡 **Have an idea to share?** Start a thread in [GitHub Discussions](https://github.com/<org>/<repo>/discussions).
+- 🛠️ **Want to contribute code?** Please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
+- 💬 **Want to chat with us?** Join our [Discord community](https://discord.gg/kDtHb5RW2) and talk to the early developers directly.
 
 ---
 
 ## Roadmap
 
-- [x] 长期个性化记忆（L0 → L3）
-- [x] 短期记忆压缩（Context Offload + Mermaid 画布）
-- [x] 本地 SQLite 后端与腾讯云向量数据库 TCVDB 后端
-- [x] OpenClaw 插件与 Hermes Gateway 适配
-- [ ] 短期记忆压缩正式产品化上线
-- [ ] 记忆可迁移：跨 Agent / 跨框架 / 跨设备的导入导出与热迁移
-- [ ] 更多 Agent 框架适配
-- [ ] 可视化调试与记忆观测面板
+- [x] Long-term personalized memory (L0 → L3)
+- [x] Short-term context compression (Context Offload + Mermaid canvas)
+- [x] Local SQLite backend and Tencent Cloud Vector Database (TCVDB) backend
+- [x] OpenClaw plugin and Hermes Gateway integration
+- [ ] Short-term compression GA release
+- [ ] Portable memory: cross-Agent / cross-framework / cross-device import, export, and live migration
+- [ ] More Agent framework adapters
+- [ ] Visual debugging and memory observability dashboard
 
 ---
 
 <table>
   <tr>
     <td width="68%">
-      <b>如果 TencentDB Agent Memory 对你有所帮助，欢迎为项目点亮 ⭐ 支持。</b><br />
-      如果有任何建议，欢迎提出issue讨论。
+      <b>If TencentDB Agent Memory has been useful to you, please give the project a ⭐ to support us.</b><br />
+      For any suggestions, feel free to open an issue and start the discussion.
     </td>
     <td width="32%" align="right">
       <img src="./assets/images/star-helper.png" alt="Star TencentDB Agent Memory" width="260" />
