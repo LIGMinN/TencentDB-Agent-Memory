@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/images/logo.png" alt="TencentDB Agent Memory" width="880" />
+<img src="./assets/images/logo2.png" alt="TencentDB Agent Memory" width="880" />
 
 ### 让 Agent 沉淀经验，让人专注创造。
 
@@ -133,7 +133,7 @@ openclaw gateway restart
 
 启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
 
-### 3. 使用 TCVDB 后端（可选）
+### 3. 使用 TCVDB 后端（可选，需版本号 ≥ 0.2.0）
 
 ```jsonc
 {
@@ -148,7 +148,7 @@ openclaw gateway restart
 }
 ```
 
-### 4. 启用短期记忆压缩（可选）
+### 4. 启用短期记忆压缩（可选，需版本号 ≥ 0.3.0）
 
 ```jsonc
 {
@@ -159,21 +159,6 @@ openclaw gateway restart
   }
 }
 ```
-
-### 5. 常用命令
-
-```bash
-# 导入历史对话，完整执行 L0 → L3 管线
-openclaw memory-tdai seed --input conversations.json
-
-# SQLite 数据迁移到 TCVDB
-migrate-sqlite-to-tcvdb --help
-
-# 导出腾讯云向量数据库数据
-export-tencent-vdb --help
-```
-
-完整配置见 [`CONFIGURATION.md`](./CONFIGURATION.md)，CLI 输入格式见 [`src/cli/README.md`](./src/cli/README.md)。
 
 ---
 
@@ -274,7 +259,6 @@ export-tencent-vdb --help
 | 文档 | 内容 |
 | :--- | :--- |
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | 完整配置参考、字段说明与高级参数 |
-| [`src/cli/README.md`](./src/cli/README.md) | `openclaw memory-tdai seed` 历史对话导入说明 |
 | [`scripts/README.memory-tencentdb-ctl.md`](./scripts/README.memory-tencentdb-ctl.md) | 运维管理工具说明 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 版本变更记录 |
 | [`openclaw.plugin.json`](./openclaw.plugin.json) | OpenClaw 插件声明与配置 Schema |
@@ -284,8 +268,8 @@ export-tencent-vdb --help
 
 我们欢迎一切形式的贡献——Bug 反馈、功能建议、文档勘误、Benchmark 复现、生态集成，或者一个 Pull Request 都可以。Agent 记忆这件事远未有定论，希望和大家一起把它做出来。
 
-- 🐞 **发现 Bug 或有疑问？** 欢迎到 [GitHub Issues](https://github.com/<org>/<repo>/issues) 提交，我们会在 24 小时内响应。
-- 💡 **有想法想交流？** 欢迎在 [GitHub Discussions](https://github.com/<org>/<repo>/discussions) 发起讨论。
+- 🐞 **发现 Bug 或有疑问？** 欢迎到 [GitHub Issues](https://github.com/Tencent/TencentDB-Agent-Memory/issues) 提交，我们会在 24 小时内响应。
+- 💡 **有想法想交流？** 欢迎在 [GitHub Discussions](https://github.com/Tencent/TencentDB-Agent-Memory/discussions) 发起讨论。
 - 🛠️ **想贡献代码？** 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 - 💬 **想加入交流群？** 扫码加入 **Agent Memory 微信社群**，与早期开发者直接对话。
 <img width="200" height="146" alt="766450d8a7b30aa7e67121b4981f1810" src="https://github.com/user-attachments/assets/7cbbb57a-ec81-4f92-b0bd-7f3c5d760c1e" />

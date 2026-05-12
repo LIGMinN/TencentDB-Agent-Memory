@@ -26,13 +26,13 @@ Help your Agent remember fixed workflows, accumulate past experience, and reuse 
 > - **Short-term context compression**: lighten the long-task context so the Agent no longer reasons while carrying every tool log on its back.
 > - **Long-term personalized memory**: distill fragmented conversations into structured memories, scene blocks, and user personas.
 
-**Plugged into OpenClaw**, it saves up to **63.59% tokens**, lifts pass rate by **+41.18%** (relative), and pushes PersonaMem accuracy from **48%** to **76%**.
+**Plugged into OpenClaw**, it saves up to **61.38% tokens**, lifts pass rate by **+51.52%** (relative), and pushes PersonaMem accuracy from **48%** to **76%**.
 
 | Memory Capability | Benchmark | Openclaw Success | With Plugin | Relative Δ | Openclaw Tokens | With Plugin Tokens | Relative Δ |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Short-term** | WideSearch | 8.5% | **12%** | **+41.18%** | 174.31M | **63.46M** | **−63.59%** |
-| **Short-term** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1 | **2375.4** | **−33.09%** |
-| **Short-term** | AA-LCR | 44.0% | **47.5%** | **+7.95%** | 112.0M | **77.3M** | **−31%** |
+| **Short-term** | WideSearch | 33% | **50%** | **+51.52%** | 221.31M | **85.64M** | **−61.38%** |
+| **Short-term** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1M | **2375.4M** | **−33.09%** |
+| **Short-term** | AA-LCR | 44.0% | **47.5%** | **+7.95%** | 112.0M | **77.3M** | **−30.98%** |
 | **Long-term** | PersonaMem | 48% | **76%** | **+59%** | — | — | — |
 
 > These are long-session evaluations, not single-turn isolated runs. Multiple tasks are concatenated into the same session and executed back-to-back. For example, each SWE-bench session runs 50 tasks consecutively to simulate the context-accumulation pressure faced by a real long-horizon Agent.
@@ -74,7 +74,7 @@ Cross-session memory is a different problem. Raw conversation logs are a low-den
 TencentDB Agent Memory uses an L0 → L3 pyramid pipeline to refine information layer by layer:
 
 <p align="center">
-  <img src="./assets/images/memory-pyramid.png" alt="TencentDB Agent Memory L0 to L3 semantic pyramid" width="860" />
+  <img src="./assets/images/memory-pyramid-en.jpg" alt="TencentDB Agent Memory L0 to L3 semantic pyramid" width="860" />
 </p>
 
 The upper layers help the Agent "understand you"; the lower layers back it up with factual detail. The Agent gets both the high-level read and the receipts when needed.
@@ -131,21 +131,6 @@ Once enabled, TencentDB Agent Memory automatically handles conversation capture,
   }
 }
 ```
-
-### 5. Common commands
-
-```bash
-# Import historical conversations and run the full L0 → L3 pipeline
-openclaw memory-tdai seed --input conversations.json
-
-# Migrate SQLite data into TCVDB
-migrate-sqlite-to-tcvdb --help
-
-# Export data from Tencent Cloud Vector Database
-export-tencent-vdb --help
-```
-
-See [`CONFIGURATION.md`](./CONFIGURATION.md) for full configuration. CLI input format is in [`src/cli/README.md`](./src/cli/README.md).
 
 ---
 
@@ -289,7 +274,6 @@ The lower stack is the armory: stable, complete, retrievable. The upper stack is
 | Document | Contents |
 | :--- | :--- |
 | [`CONFIGURATION.md`](./CONFIGURATION.md) | Full configuration reference, field descriptions, and advanced parameters |
-| [`src/cli/README.md`](./src/cli/README.md) | `openclaw memory-tdai seed` historical conversation import |
 | [`scripts/README.memory-tencentdb-ctl.md`](./scripts/README.memory-tencentdb-ctl.md) | Operations & management tooling |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Release notes and version history |
 | [`openclaw.plugin.json`](./openclaw.plugin.json) | OpenClaw plugin manifest and configuration schema |
@@ -300,8 +284,8 @@ The lower stack is the armory: stable, complete, retrievable. The upper stack is
 
 We welcome every kind of contribution — bug reports, feature ideas, doc fixes, benchmark reproductions, ecosystem integrations, or a Pull Request. Agent memory is far from a solved problem, and we'd love to figure it out together.
 
-- 🐞 **Found a bug or have a question?** Open an issue at [GitHub Issues](https://github.com/<org>/<repo>/issues) — we respond within 24 hours.
-- 💡 **Have an idea to share?** Start a thread in [GitHub Discussions](https://github.com/<org>/<repo>/discussions).
+- 🐞 **Found a bug or have a question?** Open an issue at [GitHub Issues](https://github.com/Tencent/TencentDB-Agent-Memory/issues) — we respond within 24 hours.
+- 💡 **Have an idea to share?** Start a thread in [GitHub Discussions](https://github.com/Tencent/TencentDB-Agent-Memory/discussions).
 - 🛠️ **Want to contribute code?** Please read [CONTRIBUTING.md](./CONTRIBUTING.md) first.
 - 💬 **Want to chat with us?** Join our [Discord community](https://discord.gg/kDtHb5RW2) and talk to the early developers directly.
 
