@@ -2,9 +2,7 @@
 
 <img src="./assets/images/logo2.png" alt="TencentDB Agent Memory" width="880" />
 
-### TencentDB Agent Memory
-
-Help your Agent remember fixed workflows, accumulate past experience, and reuse user preferences — **so people can pull their attention out of repetitive work and back to creation, judgment, and life itself**.
+### Help your Agent accumulate experience, so people can focus on creation.
 
 [![npm](https://img.shields.io/npm/v/@tencentdb-agent-memory/memory-tencentdb?color=blue)](https://www.npmjs.com/package/@tencentdb-agent-memory/memory-tencentdb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
@@ -13,7 +11,7 @@ Help your Agent remember fixed workflows, accumulate past experience, and reuse 
 ![Hermes](https://img.shields.io/badge/Hermes-Gateway-7B61FF)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/kDtHb5RW2)
 
-[Highlights](#-highlights) · [Overview](#overview) · [Quick Start](#quick-start) · [Design Highlights](#-design-highlights)
+[Highlights](#-highlights) · [Overview](#overview) · [Core Technology](#core-technology-reject-flat-storage-embrace-layering-and-symbolization) · [Quick Start](#quick-start)
 
 </div>
 
@@ -21,10 +19,10 @@ Help your Agent remember fixed workflows, accumulate past experience, and reuse 
 
 ## ✨ Highlights
 
-> **TencentDB Agent Memory = Short-term context compression + Long-term personalized memory.**
+> **TencentDB Agent Memory = Symbolic short-term memory + Layered long-term memory.**
 >
-> - **Short-term context compression**: lighten the long-task context so the Agent no longer reasons while carrying every tool log on its back.
-> - **Long-term personalized memory**: distill fragmented conversations into structured memories, scene blocks, and user personas.
+> - **Symbolic short-term memory**: offload heavy tool logs layer by layer and progressively condense them into lightweight Mermaid structural symbols, drastically reducing token consumption while improving task success rate.
+> - **Layered long-term memory**: refine fragmented conversations layer by layer into structured personas and scenes — no more flat vector piles.
 
 **Plugged into OpenClaw**, it saves up to **61.38% tokens**, lifts pass rate by **+51.52%** (relative), and pushes PersonaMem accuracy from **48%** to **76%**.
 
@@ -43,41 +41,70 @@ Help your Agent remember fixed workflows, accumulate past experience, and reuse 
 
 **Memory is not about letting AI store everything — it is about freeing humans from repeating everything.**
 
-TencentDB Agent Memory helps the Agent learn your workflows, retain task context, and reuse past experience, so that humans can spend their attention on judgment, creation, and work that actually matters.
+In real work, we often have to repeatedly tell the Agent about fixed SOPs, project backgrounds, tool habits, and output formats. This information should not need to be re-explained every time, yet it also should not be mindlessly and flatly crammed into the context.
 
-In real work, plenty of things should not need to be re-explained: fixed SOPs, common analysis conventions, project background, user preferences, and so on. We capture these stable experiences and let the Agent reuse them automatically when the moment is right.
+TencentDB Agent Memory helps the Agent learn your workflows, retain task context, and reuse past experience. But we **reject brute-force history piling** and **abandon irreversible brute-force summarization**. We design memory as a deeply layered system: **symbolic memory** to solve information overload within a single long task, and **memory layering** to solve cross-session experience accumulation.
 
-TencentDB Agent Memory is not a plain chat log, not a one-way irreversible summary, and not just RAG. We design memory as a layered information management system: the database carries the searchable, filterable, recallable factual base; the file system carries the readable, editable, progressively-disclosable task canvases, scene blocks, and user personas. Short-term compression solves in-task information overload, while long-term personalized memory solves cross-session user understanding.
+> **Let the Agent remember what should be remembered, so people can focus on judgment, creation, and work that truly matters.**
 
-> **Let the Agent remember what should be remembered, so humans can focus on what is actually worth creating.**
+---
 
-It is built from two capabilities:
+## Core Technology: Reject Flat Storage, Embrace Layering and Symbolization
 
-### Short-term Compression: Mermaid Infinite Canvas ✖️ Context Offload
+The design philosophy of TencentDB Agent Memory revolves around two cores: **memory layering** and **symbolic memory**. This not only lets the Agent "remember more" but, more importantly, "think more clearly".
 
-In long tasks, what eats your context window is rarely the user's goal — it is the byproducts of tool calls: search results, web page bodies, file chunks, test logs, error traces, diffs, intermediate versions. TencentDB Agent Memory offloads these full payloads to external files, keeping only summaries, paths, and task state near the active context.
+### 1. Memory Layering: Progressive Disclosure and Heterogeneous Storage
 
-```text
-Tool result
-  └─► refs/*.md               full original payload
-      └─► offload-*.jsonl     per-tool-call summary + result_ref
-          └─► mmds/*.mmd      Mermaid task canvas
-              └─► Context     only the structured state the current task needs
-```
+Traditional memory systems often slice all data into flat vectors. Recall then feels like searching for clues among a pile of unrelated sticky notes, lacking the guidance of a macro perspective.
 
-The point here is not "deleting history" but "folding history": most of the time the Agent looks at the task map; when it needs detail it drills down through `node_id` and `result_ref` back to the raw evidence.
+We believe that **whether it is long-term knowledge, short-term tasks, or future experiential capabilities, memory should never be flat — both generation and recall must have layers**. TencentDB Agent Memory adopts "layering" as the unified design philosophy across the entire architecture:
 
-### Long-term Personalized Memory: From Fragments to a User Persona
-
-Cross-session memory is a different problem. Raw conversation logs are a low-density ore: they contain preferences, facts, emotions, long-term goals — and a lot of noise. Plain vector retrieval can only find "similar fragments" and rarely surfaces the user's stable, long-term traits.
-
-TencentDB Agent Memory uses an L0 → L3 pyramid pipeline to refine information layer by layer:
+*   **Short-term memory (context offload / task) layering**: the bottom layer retains the raw, heavy tool-call results (`refs/*.md`); the middle layer extracts step summaries (`jsonl`); the top layer condenses everything into an extremely lightweight Mermaid task canvas. The Agent only needs to focus on the top-layer structure in the context, drilling down to the bottom layer via `node_id` when errors occur.
+*   **Long-term personalization (user understanding) layering**: break away from flat history logs and build a semantic pyramid: L0 raw conversations → L1 structured facts → L2 scene blocks → L3 user persona. Rely on the top-layer persona to grasp user preferences day-to-day; search the bottom-layer facts when details need verification.
+*   **Skill generation (skill and action accumulation, Roadmap) layering**: memory should not be limited to "knowing what" but also include "knowing how". We are extending layering into the action domain: from bottom-layer execution traces and error logs, the middle layer generalizes common solution patterns, and the top layer ultimately distills reusable Skills or standardized SOP code.
 
 <p align="center">
   <img src="./assets/images/memory-pyramid-en.jpg" alt="TencentDB Agent Memory L0 to L3 semantic pyramid" width="860" />
 </p>
 
-The upper layers help the Agent "understand you"; the lower layers back it up with factual detail. The Agent gets both the high-level read and the receipts when needed.
+**Progressive disclosure and heterogeneous storage**: to support this pervasive layering, we designed a storage approach combining a bottom-layer database with a top-layer file system. The bottom layer (massive facts, logs, traces) is stored in databases or archive files, ensuring stability and full-text retrieval; the top layer (personas, scenes, canvases, Skills) is stored in business-readable file systems (Markdown), ensuring high information density, clear logic, and white-box tunability. **Lower layers preserve evidence; upper layers preserve structure.**
+
+**Every piece of information is 100% retrievable and recoverable**: the biggest risk of compression or abstraction is "losing the evidence". Thanks to strict index mapping, no summary in the system is an "irreversible" black box. Whether it is an error log offloaded from short-term memory or a user preference distilled from long-term memory, the Agent or developer can perfectly trace and recover it along the chain: "top-layer symbol (persona / canvas) → middle-layer index (scene / JSONL) → bottom-layer raw text (L0 conversation / refs)".
+
+```mermaid
+flowchart LR
+  subgraph TraceLink["100% Retrievable and Recoverable Drill-Down Chain"]
+    direction TB
+    High["Top layer: Symbols & Structure<br/>(Persona / Mermaid Canvas)"] 
+    Mid["Middle layer: Summaries & Indexes<br/>(Scene Blocks / JSONL Summaries)"]
+    Low["Bottom layer: Complete Facts & Evidence<br/>(L0 Raw Conversations / refs Raw Text)"]
+    
+    High == "Need details / Encountered doubt" ==> Mid
+    Mid == "Via node_id or citation matching" ==> Low
+  end
+```
+
+### 2. Symbolic Memory: Express Maximum Semantics with Minimum Symbols (Mermaid Canvas)
+
+In long tasks, the biggest token consumers are often verbose process logs (e.g., search results, code, error messages). To address this, we combine **Context Offloading** to propose **Symbolic Memory**:
+
+*   **Mermaid symbol graph**: replacing verbose natural language or flat JSON, we use high-density, strongly-topological Mermaid syntax to depict task state transitions, precisely understandable by LLMs and easy for humans to read.
+*   **History folding and offloading**: complete tool logs are offloaded to the external file system; the context retains only a lightweight Mermaid task map.
+*   **`node_id`-based tracing**: the Agent reasons by looking at the symbol graph; when it needs to verify details, it simply greps the `node_id` on the graph to instantly retrieve the full original text — drastically reducing costs while preserving 100% traceability.
+
+```mermaid
+graph LR
+    Log["Verbose process logs<br/>(hundreds of thousands of tokens)"] -->|"1. Offload full text"| FS[("External file system<br/>(refs/xxx.md)")]
+    Log -->|"2. Extract relationships"| MMD["Mermaid symbol graph<br/>(with node_id)"]
+    
+    MMD -->|"3. Lightweight injection"| Agent(("Agent context<br/>(a few hundred tokens)"))
+    Agent -. "4. Drill down to recover full text via node_id anytime" .-> FS
+    
+    style Log fill:#f1f5f9,stroke:#94a3b8,stroke-dasharray: 5 5
+    style FS fill:#f8fafc,stroke:#cbd5e1
+    style MMD fill:#eff6ff,stroke:#3b82f6,stroke-width:2px
+    style Agent fill:#fffbeb,stroke:#f59e0b,stroke-width:2px
+```
 
 ---
 
@@ -189,36 +216,7 @@ For all fields, types, and constraints see [`openclaw.plugin.json`](./openclaw.p
 
 ## 🤔 Design Highlights
 
-### 1. Progressive disclosure: compress the task, accumulate the user
-
-The point of TencentDB Agent Memory is not "store more" but **layering information by density and purpose**:
-
-- **Short-term compression** solves "the current task is too long": offload raw tool results to external storage, fold the task structure into a Mermaid canvas.
-- **Long-term personalized memory** solves "next time we meet, you don't know me": refine raw conversations layer by layer into structured memories, scene blocks, and a user persona.
-
-Both share the same engineering principle: **lower layers preserve evidence, upper layers preserve structure; you read upper layers by default and drill down only when needed.**
-
-| Direction | Lower: fidelity | Middle: organization | Upper: compression / abstraction | Goal |
-| :--- | :--- | :--- | :--- | :--- |
-| Short-term compression | `refs/*.md` raw tool result | `offload-*.jsonl` tool summary | `mmds/*.mmd` Mermaid task canvas / metadata | Keep long tasks moving instead of being dragged down by context |
-| Long-term personalized memory | L0 raw conversation | L1 structured memory / L2 scene block | L3 user persona `persona.md` | Next time you show up, the Agent knows you better |
-
-This lets the Agent work the way humans do: read the table of contents first, then chapters, and only crack open the raw material when needed. The context window stops being a desk that just keeps piling up — it becomes a workspace you can fold and unfold.
-
-### 2. Long-term memory: the L0 → L3 semantic pyramid
-
-Long-term memory is more than "save the chat log somewhere". The real value is mining stable preferences, implicit goals, and contextualized experience out of conversational fragments.
-
-| Layer | Output | What changes |
-| :--- | :--- | :--- |
-| L0 | Raw conversation | Preserves the factual base, but with the most noise and the lowest density |
-| L1 | Structured atomic memory | Clean facts extracted from the dialogue, suitable for semantic + temporal retrieval |
-| L2 | Scene block | Aggregates related memories into scenes — understand "how the user behaves in this kind of situation" |
-| L3 | User persona | Distills long-term preferences, stable traits, and decision style as a high-density context to inject |
-
-The shape mirrors a DIKW pyramid: from Data to Information to Knowledge to Wisdom. The Agent stops merely recalling "what the user said" and starts understanding "what the user might need".
-
-### 3. Macro persona + micro facts: one drill-down mechanism to reduce hallucination
+### 1. Macro persona + micro facts: one drill-down mechanism to reduce hallucination
 
 The biggest risk of compression is "saving tokens but losing the receipts". So TencentDB Agent Memory does not collapse history into an irreversible summary — it keeps a clear path from high-level abstraction back to ground-truth evidence.
 
@@ -231,7 +229,7 @@ The biggest risk of compression is "saving tokens but losing the receipts". So T
 
 The upper layer carries "judgment" and direction; the lower layer carries "evidence" and precision. Short-term compression and long-term memory close into one loop: **foldable and unfoldable; abstract yet auditable.**
 
-### 4. White-box debuggable: memory is not a black-box vector
+### 2. White-box debuggable: memory is not a black-box vector
 
 Many memory systems break here: when recall is wrong, all you see is a list of vector scores, and you cannot tell where things went sideways. TencentDB Agent Memory keeps the key intermediates as readable files:
 
@@ -242,21 +240,7 @@ Many memory systems break here: when recall is wrong, all you see is a list of v
 
 Debugging is no longer rummaging through a black-box database — it is walking the chain "persona → scene → memory → raw text" until the issue surfaces.
 
-### 5. Heterogeneous storage decoupled: DB for facts, file system for structure
-
-Long-term memory and short-term compression look like two features but follow the same storage principle underneath: **the database stores searchable facts; the file system stores readable, editable structure.**
-
-| Information type | Storage medium | Why this placement |
-| :--- | :--- | :--- |
-| L0 / L1 long-term memory base | SQLite or TCVDB | Large volume; needs semantic recall and temporal lookup |
-| L2 / L3 scenes and persona | Markdown files | Must be human-readable, prompt-tunable, progressively disclosable |
-| Offload raw payloads | `refs/*.md` | Raw evidence must be kept in full but should not live in the context |
-| Offload summaries | JSONL | Easy to look up tool-call history by `node_id` |
-| Offload task structure | Mermaid files | So both Agents and humans can see how the task is moving |
-
-The lower stack is the armory: stable, complete, retrievable. The upper stack is the battle map: flexible, readable, fast to iterate. The short-term canvas and the long-term persona are both, at heart, **high-density working surfaces the Agent can read.**
-
-### 6. Production-ready engineering: a real plugin, not a demo
+### 3. Production-ready engineering: a real plugin, not a demo
 
 | Capability | Description |
 | :--- | :--- |
