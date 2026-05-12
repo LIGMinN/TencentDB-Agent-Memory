@@ -297,63 +297,6 @@ export class CheckpointManager {
   // Public API — mutating (all serialized via file lock)
   // ============================
 
-  /**
-   * Advance the captured timestamp after successful upload/recording.
-   * Also updates total_processed and persona counters.
-   *
-   * NOTE: This advances the GLOBAL cursor (`Checkpoint.last_captured_timestamp`).
-   * For per-session cursor advancement, use `advanceSessionCapturedTimestamp()`.
-   * The global cursor is kept for aggregate stats / backward compat, but should
-   * NOT be used as the L0 incremental-capture filter (use per-session instead).
-   */
-  async advanceCapturedTimestamp(maxTimestamp: number, messageCount: number): Promise<void> {
-    const cp = await this.mutate((cp) => {
-      cp.last_captured_timestamp = maxTimestamp;
-      cp.total_processed += messageCount;
-      cp.memories_since_last_persona += messageCount;
-    });
-    this.logger.info(
-      `[checkpoint] advanceCapturedTimestamp: -> ${maxTimestamp} (+${messageCount} msgs), ` +
-      `total_processed=${cp.total_processed}, memories_since_last_persona=${cp.memories_since_last_persona}`,
-    );
-  }
-
-  /**
-   * Advance the per-session L0 capture cursor after recording messages.
-   * This is the **primary** cursor for incremental L0 recording — each session
-   * tracks its own progress independently, preventing cross-session cursor drift.
-   *
-   * Also updates the global cursor / total_processed for aggregate stats.
-   */
-  async advanceSessionCapturedTimestamp(
-    sessionKey: string,
-    maxTimestamp: number,
-    messageCount: number,
-  ): Promise<void> {
-    const cp = await this.mutate((cp) => {
-      // Per-session cursor (runner-owned)
-      const state = this.getRunnerState(cp, sessionKey);
-      state.last_captured_timestamp = maxTimestamp;
-      // Global stats (aggregate only — not used for filtering)
-      cp.last_captured_timestamp = Math.max(cp.last_captured_timestamp, maxTimestamp);
-      cp.total_processed += messageCount;
-      cp.memories_since_last_persona += messageCount;
-    });
-    this.logger.info(
-      `[checkpoint] advanceSessionCapturedTimestamp session=${sessionKey}: -> ${maxTimestamp} ` +
-      `(+${messageCount} msgs), total_processed=${cp.total_processed}`,
-    );
-  }
-
-  /**
-   * Increment L0 conversation count.
-   */
-  async incrementL0ConversationCount(): Promise<void> {
-    await this.mutate((cp) => {
-      cp.l0_conversations_count += 1;
-    });
-  }
-
   // ============================
   // Persona methods (L3)
   // ============================
@@ -460,17 +403,20 @@ export class CheckpointManager {
   /**
    * Mark L1 extraction completed: reset sinceL1 counter, advance L1 cursor,
    * and optionally save the last scene name for cross-batch continuity.
+   *
+   * @param cursorRecordedAtMs - The max recorded_at epoch ms of processed L0 messages.
+   *   This becomes the new `last_l1_cursor` value (recorded_at semantics, not conversation timestamp).
    */
   async markL1ExtractionComplete(
     sessionKey: string,
     memoriesExtracted: number,
-    cursorTimestamp?: number,
+    cursorRecordedAtMs?: number,
     lastSceneName?: string,
   ): Promise<void> {
     await this.mutate((cp) => {
       const state = this.getRunnerState(cp, sessionKey);
-      if (cursorTimestamp) {
-        state.last_l1_cursor = cursorTimestamp;
+      if (cursorRecordedAtMs) {
+        state.last_l1_cursor = cursorRecordedAtMs;
       }
       if (lastSceneName !== undefined) {
         state.last_scene_name = lastSceneName;
@@ -480,7 +426,7 @@ export class CheckpointManager {
     });
     this.logger.info(
       `[checkpoint] markL1ExtractionComplete session=${sessionKey}: ` +
-      `extracted=${memoriesExtracted}, cursor=${cursorTimestamp ?? "(unchanged)"}, ` +
+      `extracted=${memoriesExtracted}, cursor=${cursorRecordedAtMs ?? "(unchanged)"}, ` +
       `lastScene="${lastSceneName ?? "(unchanged)"}"`,
     );
   }
@@ -533,7 +479,6 @@ export class CheckpointManager {
         // Global stats (aggregate only — not used for filtering)
         cp.last_captured_timestamp = Math.max(cp.last_captured_timestamp, result.maxTimestamp);
         cp.total_processed += result.messageCount;
-        cp.memories_since_last_persona += result.messageCount;
         // Increment L0 conversation count (was a separate mutate() call before)
         cp.l0_conversations_count += 1;
       }

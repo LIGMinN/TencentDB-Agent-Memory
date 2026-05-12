@@ -8,8 +8,10 @@
  *
  * Security: The LLM is sandboxed to scene_blocks/ only (workspaceDir = scene_blocks/).
  * It has NO visibility into checkpoint, scene_index, persona.md, or any other system file.
- * File deletion is achieved via "soft-delete" — writing an empty string to the file
- * — and the SceneExtractor subsequently removes empty files with fs.unlink.
+ * File deletion is achieved via "soft-delete" — writing the marker `[DELETED]` to the file
+ * — and the SceneExtractor subsequently removes soft-deleted files with fs.unlink.
+ * Note: writing an empty/whitespace-only string is rejected by the core write tool's
+ * parameter validation, so we use a non-empty marker instead.
  *
  * Persona update requests are communicated via text output signals (out-of-band),
  * parsed by the engineering side after LLM execution completes.
@@ -22,6 +24,8 @@ export interface SceneExtractionPromptParams {
   sceneCountWarning?: string;
   /** List of existing scene filenames (relative, e.g. ["work.md", "hobby.md"]) */
   existingSceneFiles?: string[];
+  /** Maximum number of scene blocks allowed */
+  maxScenes: number;
 }
 
 export function buildSceneExtractionPrompt(params: SceneExtractionPromptParams): string {
@@ -31,6 +35,7 @@ export function buildSceneExtractionPrompt(params: SceneExtractionPromptParams):
     currentTimestamp,
     sceneCountWarning,
     existingSceneFiles,
+    maxScenes,
   } = params;
 
   const warningSection = sceneCountWarning
@@ -51,7 +56,7 @@ export function buildSceneExtractionPrompt(params: SceneExtractionPromptParams):
 
 ### Layer 2 (Processing): Scene Diaries  
 - **形态**：**不是清单，是连贯的叙事文档**
-- **逻辑**：将 L1 碎片融合进特定场景文件（强制限制在15个以内）
+- **逻辑**：将 L1 碎片融合进特定场景文件
 - **动作**：Create（创建）、Integrate（整合）、Rewrite（重写）
 - **禁止**：简单追加列表
 
@@ -62,6 +67,8 @@ ${warningSection}
 1. 新增记忆 (New Memory): 一段原始的、非结构化的新近回忆信息。
 2. 现有 Block 映射表 (Existing Blocks Map): 包含当前所有记忆块（Markdown 文件）的文件名和摘要的列表。
 3. 当前时间 (Current Time): 用于生成元数据的具体时间戳。
+
+**⚠️ 场景文件数量上限：${maxScenes} 个。处理完成后目录中的场景文件数量必须严格小于此上限。**
 
 
 ### 1️⃣ New Memories List
@@ -86,6 +93,8 @@ ${existingSceneFiles.map((f) => `- \`${f}\``).join("\n")}
 3. **创建新场景文件时**，直接使用文件名，如 \`新场景名.md\`
 4. **场景文件支持 replace_in_file**。对于局部更新（如只更新某个章节或 META 字段），可以使用 \`replace_in_file\` 进行精确替换。对于大范围重写或结构性变更，建议使用 \`read_file\` + \`write_to_file\` 整体重写。
 5. **场景索引和系统配置由工程系统自动维护**，你只需专注于操作 \`.md\` 场景文件
+6. **删除文件的唯一方式**：使用 \`write_to_file(filename, '[DELETED]')\` 将文件内容写为 \`[DELETED]\` 标记。系统会自动清理带有此标记的文件。**禁止**写入空字符串（会被系统拒绝）。**禁止**用 \`[ARCHIVE]\`、\`[CONSOLIDATED]\` 等其他标记替代删除——只有 \`[DELETED]\` 标记会触发系统清理。
+7. **禁止创建报告/整合/汇总类文件**。你的输出必须是有意义的场景叙事文件（如"技术架构与工程实践.md"、"日常生活与工作节奏.md"）。禁止创建以 BATCH、REPORT、CONSOLIDATION、INTEGRATION、ARCHIVE、SUMMARY 等为前缀的文件。
 
 ## 工作流与逻辑 (Workflow & Logic)
 在生成输出之前，你必须执行以下"思维链"过程：
@@ -94,11 +103,12 @@ ${existingSceneFiles.map((f) => `- \`${f}\``).join("\n")}
 
 **在处理任何记忆之前，你必须：**
 
-1. **统计当前场景总数**：检查 "Existing Scene Blocks Summary" 中的场景数量
-2. **遵守分级预警，上限为15个block**：
-   - 红色预警（≥ 15）：**必须先合并**，将最相似的 2-4 个场景合并为 1 个，然后再处理新记忆
-   - 橙色预警（= 15-1）：**只能 UPDATE 现有场景，不能 CREATE 新场景**
-   - 黄色预警（接近15）：**优先 UPDATE 或主动 MERGE 相似场景**
+1. **统计当前场景总数**：查看 "Existing Scene Blocks Summary" 顶部标注的当前场景总数
+2. **最终目标**：处理完成后，目录中的场景文件数量必须 **严格小于 ${maxScenes}**
+3. **遵守分级预警**：
+   - 红色预警（≥ ${maxScenes}）：**必须先通过 MERGE 减少文件数量**，将最相似的 2-4 个场景合并为 1 个，**并删除被合并的旧文件**，直到文件数 < ${maxScenes} 后，再处理新记忆
+   - 橙色预警（= ${maxScenes - 1}）：**只能 UPDATE 现有场景，不能 CREATE 新场景**
+   - 黄色预警（接近 ${maxScenes}）：**优先 UPDATE 或主动 MERGE 相似场景**
 
 **合并优先级**（当需要合并时，按以下顺序选择）：
 1. **主题高度重叠**：如"Python后端开发"和"Go后端开发" → 合并为"后端开发技术栈"
@@ -120,10 +130,11 @@ ${existingSceneFiles.map((f) => `- \`${f}\``).join("\n")}
 1. **UPDATE（更新）**【首选策略】: 如果存在相关的 Block（基于摘要或文件名的相似性），先 read 文件内的具体信息，再锁定该 Block 进行更新（write 或 replace）
 2. **MERGE（合并）**: 
    - 合并的新 block 应该是生成概括性更强的场景，包含已有的多个相似场景
-   - **强制合并**：当前 Block 总数 **≥ 上限**时，必须先将多个相似记忆合并，或者删除最旧或者最不重要的 block
+   - **强制合并**：当前 Block 总数 **≥ ${maxScenes}** 时，必须先将多个相似记忆合并
    - **主动合并**：即使未达上限，如果两个 Block 属于同一叙事弧线，也应合并以增加深度
+   - **⚠️ 合并后必须删除旧文件**：被合并的旧场景文件必须通过 \`write_to_file(旧文件名, '[DELETED]')\` 写入删除标记。**仅仅打标记（如 [ARCHIVE]、[CONSOLIDATED]）不算删除，文件仍会占用配额。**
 3. **CREATE（新建）**【最后手段】: 
-   - **前提条件**：当前场景总数未达上限
+   - **前提条件**：当前场景总数 < ${maxScenes}
    - **CREATE 前的强制验证**：必须先用 \`read_file\` 检查至少 2 个最相似的现有场景，确认新记忆确实无法融入后才能 CREATE。跳过验证直接 CREATE 是被禁止的
    - 如果话题是全新的且与现有内容区分度高，可以创建新 Block
    - **每次批处理最多新增 1 个场景**
@@ -135,14 +146,15 @@ ${existingSceneFiles.map((f) => `- \`${f}\``).join("\n")}
 3. \`write_to_file('Python后端开发.md', B)\` → **整体重写该场景文件**
    或 \`replace_in_file('Python后端开发.md', old_section, new_section)\` → **局部更新某部分**
 
-合并多个 block 的逻辑：
+**示例 B：合并多个 block（MERGE — 合并后必须删除旧文件）**
 **具体操作步骤（工具调用）**：
 1. \`read_file('Python后端开发.md')\` → 获取内容 A
 2. \`read_file('Go后端开发.md')\` → 获取内容 B
 3. 整合 A + B + 新记忆 → 生成新内容 C（\`heat = heatA + heatB + 1\`）
-4. \`write_to_file('后端开发技术栈.md', C)\` → 创建新文件，写入合并后的完整内容
-5. \`write_to_file('Python后端开发.md', '')\` → **清空旧文件 A（标记删除）**
-6. \`write_to_file('Go后端开发.md', '')\` → **清空旧文件 B（标记删除）**
+4. \`write_to_file('后端开发技术栈.md', C)\` → 创建合并后的新文件
+5. \`write_to_file('Python后端开发.md', '[DELETED]')\` → **⚠️ 删除旧文件 A（写 [DELETED] 标记）**
+6. \`write_to_file('Go后端开发.md', '[DELETED]')\` → **⚠️ 删除旧文件 B（写 [DELETED] 标记）**
+**关键**：步骤 5-6 是必须的！不执行删除 = 文件总数不减少 = 合并无效。
 
 ### 阶段 3：撰写与合成（核心任务）
 深度整合: 严禁简单的文本追加。你必须结合上下文（基于摘要或提供的原始内容）重写叙事，将新信息自然地融入其中。
@@ -224,5 +236,5 @@ reason: 具体原因描述
    - 使用 \`read_file\` 读取需要更新的场景文件
    - 使用 \`write_to_file\` 创建新文件或**整体重写**已有场景文件
    - 使用 \`replace_in_file\` 对场景文件进行**局部更新**（如只更新某个章节）
-   - **删除文件**：使用 \`write_to_file(filename, '')\` 将文件内容清空（系统会自动清理空文件，禁止使用其他删除方式）`;
+   - **删除文件**：使用 \`write_to_file(filename, '[DELETED]')\` 将文件内容写为 **\`[DELETED]\` 标记**。系统会自动清理这些文件。**重要**：只有 \`[DELETED]\` 标记才会触发系统清理。写入空字符串会被系统拒绝，写入 \`[ARCHIVE]\`、\`[CONSOLIDATED]\` 等标记**不会删除文件**，文件会继续占用场景配额。`;
 }

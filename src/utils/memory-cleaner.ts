@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { VectorStore } from "../store/vector-store.js";
+import type { IMemoryStore } from "../store/types.js";
 import { ManagedTimer } from "./managed-timer.js";
 
 interface Logger {
@@ -16,7 +16,7 @@ export interface MemoryCleanerOptions {
   retentionDays: number;
   cleanTime: string;
   logger?: Logger;
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
 }
 
 interface CleanupStats {
@@ -33,14 +33,14 @@ const L1_DIR_NAME = "records";
 export class LocalMemoryCleaner {
   private readonly timer: ManagedTimer;
   private destroyed = false;
-  private vectorStore?: VectorStore;
+  private vectorStore?: IMemoryStore;
 
   constructor(private readonly opts: MemoryCleanerOptions) {
     this.timer = new ManagedTimer("memory-tdai-cleaner", () => this.destroyed);
     this.vectorStore = opts.vectorStore;
   }
 
-  setVectorStore(vectorStore: VectorStore | undefined): void {
+  setVectorStore(vectorStore: IMemoryStore | undefined): void {
     this.vectorStore = vectorStore;
   }
 
@@ -51,10 +51,10 @@ export class LocalMemoryCleaner {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
     const utcOffset = formatUtcOffset(-now.getTimezoneOffset());
 
-    this.opts.logger?.info(
+    this.opts.logger?.debug?.(
       `${TAG} Enabled: retentionDays=${this.opts.retentionDays}, cleanTime=${this.opts.cleanTime}, dirs=[${L0_DIR_NAME}, ${L1_DIR_NAME}]`,
     );
-    this.opts.logger?.info(
+    this.opts.logger?.debug?.(
       `${TAG} Runtime clock: nowLocal=${formatLocalDateTime(now)}, nowIso=${now.toISOString()}, tz=${tz}, utcOffset=${utcOffset}`,
     );
 
@@ -110,7 +110,7 @@ export class LocalMemoryCleaner {
       let failedL1DbCleanup = 0;
 
       try {
-        removedL0 = vectorStore.deleteL0ExpiredByRecordedAt(cutoffIso);
+        removedL0 = await vectorStore.deleteL0Expired(cutoffIso);
       } catch (err) {
         failedL0DbCleanup = 1;
         this.opts.logger?.warn(
@@ -119,7 +119,7 @@ export class LocalMemoryCleaner {
       }
 
       try {
-        removedL1 = vectorStore.deleteL1ExpiredByUpdatedTime(cutoffIso);
+        removedL1 = await vectorStore.deleteL1Expired(cutoffIso);
       } catch (err) {
         failedL1DbCleanup = 1;
         this.opts.logger?.warn(
@@ -150,7 +150,7 @@ export class LocalMemoryCleaner {
     const passedToday = targetToday <= nowMs;
     const delayMs = Math.max(0, next - nowMs);
 
-    this.opts.logger?.info(
+    this.opts.logger?.debug?.(
       `${TAG} Schedule next run: nowLocal=${formatLocalDateTime(now)}, cleanTime=${this.opts.cleanTime}, targetTodayLocal=${formatLocalDateTime(new Date(targetToday))}, passedToday=${passedToday}, nextRunLocal=${formatLocalDateTime(new Date(next))}, nextRunIso=${new Date(next).toISOString()}, delayMs=${delayMs}`,
     );
 

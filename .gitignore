@@ -10,5 +10,10 @@ workspace/
 # Test caches
 __tests__/soak/.model-cache/
 
+# Migration build output
+scripts/export-tencent-vdb/dist/
+scripts/migrate-sqlite-to-tcvdb/dist/
+scripts/read-local-memory/dist/
+
 node_modules/
 benchmark-runs/

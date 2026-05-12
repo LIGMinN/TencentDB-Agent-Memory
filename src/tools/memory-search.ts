@@ -10,8 +10,8 @@
  * The tool is registered via `api.registerTool()` in index.ts.
  */
 
-import type { VectorStore, VectorSearchResult } from "../store/vector-store.js";
-import { buildFtsQuery } from "../store/vector-store.js";
+import type { IMemoryStore, L1SearchResult } from "../store/types.js";
+import { buildFtsQuery } from "../store/sqlite.js";
 import type { EmbeddingService } from "../store/embedding.js";
 
 // ============================
@@ -90,7 +90,7 @@ export async function executeMemorySearch(params: {
   limit: number;
   type?: string;
   scene?: string;
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
   logger?: Logger;
 }): Promise<MemorySearchResult> {
@@ -153,7 +153,7 @@ export async function executeMemorySearch(params: {
           return [];
         }
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 query: "${ftsQuery}"`);
-        const ftsResults = vectorStore.ftsSearchL1(ftsQuery, candidateK);
+        const ftsResults = await vectorStore.searchL1Fts(ftsQuery, candidateK);
         logger?.debug?.(`${TAG} [hybrid-fts] FTS5 returned ${ftsResults.length} candidates`);
         return ftsResults.map((r) => ({
           id: r.record_id,
@@ -182,7 +182,7 @@ export async function executeMemorySearch(params: {
         logger?.debug?.(
           `${TAG} [hybrid-vec] Embedding OK, dims=${queryEmbedding.length}, searching top-${candidateK}...`,
         );
-        const vecResults: VectorSearchResult[] = vectorStore.search(queryEmbedding, candidateK);
+        const vecResults: L1SearchResult[] = await vectorStore.searchL1Vector(queryEmbedding, candidateK, query);
         logger?.debug?.(`${TAG} [hybrid-vec] Vector search returned ${vecResults.length} candidates`);
         return vecResults.map((r) => ({
           id: r.record_id,

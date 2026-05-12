@@ -16,8 +16,8 @@ import type { MemoryTdaiConfig } from "../config.js";
 import { readSceneIndex } from "../scene/scene-index.js";
 import { generateSceneNavigation, stripSceneNavigation } from "../scene/scene-navigation.js";
 import type { MemoryRecord } from "../record/l1-reader.js";
-import type { VectorStore, VectorSearchResult, FtsSearchResult } from "../store/vector-store.js";
-import { buildFtsQuery } from "../store/vector-store.js";
+import type { IMemoryStore, L1SearchResult, L1FtsResult } from "../store/types.js";
+import { buildFtsQuery } from "../store/sqlite.js";
 import type { EmbeddingService } from "../store/embedding.js";
 import { sanitizeText } from "../utils/sanitize.js";
 
@@ -35,6 +35,11 @@ const MEMORY_TOOLS_GUIDE = `<memory-tools-guide>
 - **tdai_memory_search**：搜索结构化记忆（L1），适用于回忆用户偏好、历史事件节点、规则等关键信息。
 - **tdai_conversation_search**：搜索原始对话（L0），适用于查找具体消息原文、时间线、上下文细节；也可用于补充或校验 memory_search 的结果。
 - **read_file**（Scene Navigation 中的路径）：当已定位到相关情境，且需要该场景的完整画像、事件经过或阶段结论时使用。
+
+### ⚠️ 调用次数限制
+每轮对话中，tdai_memory_search 和 tdai_conversation_search **合计最多调用 3 次**。
+- 首次搜索无结果时，可换关键词或换工具重试，但总调用次数不要超过 3 次。
+- 若 3 次搜索后仍无结果，说明该信息不在记忆中，请直接根据已有信息回复用户，不要继续搜索。
 </memory-tools-guide>`
 
 /**
@@ -82,7 +87,7 @@ export async function performAutoRecall(params: {
   cfg: MemoryTdaiConfig;
   pluginDataDir: string;
   logger?: Logger;
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
 }): Promise<RecallResult | undefined> {
   const { cfg, logger } = params;
@@ -112,7 +117,7 @@ async function performAutoRecallInner(params: {
   cfg: MemoryTdaiConfig;
   pluginDataDir: string;
   logger?: Logger;
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   embeddingService?: EmbeddingService;
 }): Promise<RecallResult | undefined> {
   const { userText, cfg, pluginDataDir, logger, vectorStore, embeddingService } = params;
@@ -269,7 +274,7 @@ async function searchMemoriesWithDetails(
   cfg: MemoryTdaiConfig,
   logger: Logger | undefined,
   strategy: "keyword" | "embedding" | "hybrid",
-  vectorStore?: VectorStore,
+  vectorStore?: IMemoryStore,
   embeddingService?: EmbeddingService,
 ): Promise<{ lines: string[]; memories: RecalledMemory[]; timing: SearchTiming }> {
   const result = await searchMemories(userText, pluginDataDir, cfg, logger, strategy, vectorStore, embeddingService);
@@ -305,7 +310,7 @@ async function searchMemories(
   cfg: MemoryTdaiConfig,
   logger: Logger | undefined,
   strategy: "keyword" | "embedding" | "hybrid",
-  vectorStore?: VectorStore,
+  vectorStore?: IMemoryStore,
   embeddingService?: EmbeddingService,
 ): Promise<SearchResult> {
   const emptyResult: SearchResult = { lines: [], timing: { ftsMs: 0, embeddingMs: 0, ftsHits: 0, embeddingHits: 0 } };
@@ -378,14 +383,14 @@ async function searchByKeyword(
   maxResults: number,
   threshold: number,
   logger?: Logger,
-  vectorStore?: VectorStore,
+  vectorStore?: IMemoryStore,
 ): Promise<string[]> {
   // Prefer FTS5 if available
   if (vectorStore?.isFtsAvailable()) {
     const ftsQuery = buildFtsQuery(userText);
     if (ftsQuery) {
       logger?.debug?.(`${TAG} [keyword-fts] Using FTS5 BM25 search: query="${ftsQuery}"`);
-      const ftsResults = vectorStore.ftsSearchL1(ftsQuery, maxResults * 2);
+      const ftsResults = await vectorStore.searchL1Fts(ftsQuery, maxResults * 2);
       if (ftsResults.length > 0) {
         logger?.debug?.(
           `${TAG} [keyword-fts] FTS5 raw results (${ftsResults.length}): ` +
@@ -428,7 +433,7 @@ async function searchByEmbedding(
   userText: string,
   maxResults: number,
   threshold: number,
-  vectorStore: VectorStore,
+  vectorStore: IMemoryStore,
   embeddingService: EmbeddingService,
   logger?: Logger,
 ): Promise<string[]> {
@@ -442,7 +447,7 @@ async function searchByEmbedding(
     `searching top-${maxResults * 2}...`,
   );
   // Retrieve more candidates for subsequent filtering
-  const vecResults: VectorSearchResult[] = vectorStore.search(queryEmbedding, maxResults * 2);
+  const vecResults: L1SearchResult[] = await vectorStore.searchL1Vector(queryEmbedding, maxResults * 2);
 
   if (vecResults.length === 0) {
     logger?.debug?.(`${TAG} [embedding-search] Returned 0 results`);
@@ -489,7 +494,7 @@ async function searchHybrid(
   _pluginDataDir: string,
   maxResults: number,
   _threshold: number,
-  vectorStore: VectorStore,
+  vectorStore: IMemoryStore,
   embeddingService: EmbeddingService,
   logger?: Logger,
 ): Promise<SearchResult> {
@@ -505,7 +510,7 @@ async function searchHybrid(
         if (vectorStore.isFtsAvailable()) {
           const ftsQuery = buildFtsQuery(userText);
           if (ftsQuery) {
-            const ftsResults = vectorStore.ftsSearchL1(ftsQuery, candidateK);
+            const ftsResults = await vectorStore.searchL1Fts(ftsQuery, candidateK);
             if (ftsResults.length > 0) {
               logger?.debug?.(`${TAG} [hybrid-keyword-fts] FTS5 found ${ftsResults.length} candidates`);
               // Convert FtsSearchResult to ScoredRecord for RRF merge
@@ -547,12 +552,12 @@ async function searchHybrid(
         logger?.debug?.(
           `${TAG} [hybrid-embedding] Embedding OK, dims=${queryEmbedding.length}, searching top-${candidateK}...`,
         );
-        const results = vectorStore.search(queryEmbedding, candidateK);
+        const results = await vectorStore.searchL1Vector(queryEmbedding, candidateK, userText);
         logger?.debug?.(`${TAG} [hybrid-embedding] Got ${results.length} candidates`);
         return { results, ms: performance.now() - tStart };
       } catch (err) {
         logger?.warn?.(`${TAG} Hybrid: embedding part failed: ${err instanceof Error ? err.message : String(err)}`);
-        return { results: [] as VectorSearchResult[], ms: performance.now() - tStart };
+        return { results: [] as L1SearchResult[], ms: performance.now() - tStart };
       }
     })(),
   ]);
@@ -719,7 +724,7 @@ function recordToFormatable(record: MemoryRecord): FormatableMemory {
  * Build a FormatableMemory from a VectorSearchResult (embedding search path).
  * Handles empty/invalid metadata_json, empty timestamp_str gracefully.
  */
-function vectorResultToFormatable(r: VectorSearchResult): FormatableMemory {
+function vectorResultToFormatable(r: L1SearchResult): FormatableMemory {
   let activityStart: string | undefined;
   let activityEnd: string | undefined;
   if (r.metadata_json && r.metadata_json !== "{}") {
@@ -743,7 +748,7 @@ function vectorResultToFormatable(r: VectorSearchResult): FormatableMemory {
  * Build a FormatableMemory from an FtsSearchResult (FTS5 keyword search path).
  * Handles empty/invalid metadata_json, empty timestamp_str gracefully.
  */
-function ftsResultToFormatable(r: FtsSearchResult): FormatableMemory {
+function ftsResultToFormatable(r: L1FtsResult): FormatableMemory {
   let activityStart: string | undefined;
   let activityEnd: string | undefined;
   if (r.metadata_json && r.metadata_json !== "{}") {

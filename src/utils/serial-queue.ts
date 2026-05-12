@@ -50,6 +50,11 @@ export class SerialQueue {
     return this.running;
   }
 
+  /** Whether the queue is idle (no queued tasks and nothing running). */
+  get idle(): boolean {
+    return this.queue.length === 0 && !this.running;
+  }
+
   /** Add a task to the queue. Returns the task's result promise. */
   add<T>(task: Task<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {

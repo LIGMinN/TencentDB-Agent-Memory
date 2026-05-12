@@ -19,7 +19,7 @@ let _reporter: IReporter | undefined;
 export function initReporter(opts: {
   enabled: boolean;
   type: string;
-  logger: { info: (msg: string) => void };
+  logger: { info: (msg: string) => void; debug?: (msg: string) => void };
   instanceId: string;
   pluginVersion: string;
 }): void {
@@ -31,13 +31,21 @@ export function initReporter(opts: {
       break;
     // TODO: add new reporter type
     default:
-      opts.logger.info(`[memory-tdai] Unknown reporter type "${opts.type}", disabled reporting`);
+      opts.logger.debug?.(`[memory-tdai] Unknown reporter type "${opts.type}", disabled reporting`);
       break;
   }
 }
 
 export function setReporter(reporter: IReporter): void {
   _reporter = reporter;
+}
+
+/**
+ * Reset the reporter singleton so that the next `initReporter` call takes effect.
+ * Must be called at plugin re-registration (hot-reload) to pick up config changes.
+ */
+export function resetReporter(): void {
+  _reporter = undefined;
 }
 
 export function report(event: string, data: ReportPayload): void {

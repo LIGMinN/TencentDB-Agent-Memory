@@ -16,8 +16,8 @@ import { CONFLICT_DETECTION_SYSTEM_PROMPT, formatBatchConflictPrompt } from "../
 import type { CandidateMatch } from "../prompts/l1-dedup.js";
 import { CleanContextRunner } from "../utils/clean-context-runner.js";
 import { sanitizeJsonForParse } from "../utils/sanitize.js";
-import type { VectorStore } from "../store/vector-store.js";
-import { buildFtsQuery } from "../store/vector-store.js";
+import type { IMemoryStore } from "../store/types.js";
+import { buildFtsQuery } from "../store/sqlite.js";
 import type { EmbeddingService } from "../store/embedding.js";
 
 interface Logger {
@@ -60,7 +60,7 @@ export async function batchDedup(params: {
   logger?: Logger;
   model?: string;
   /** Vector store for cosine similarity candidate recall */
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   /** Embedding service for computing query vectors */
   embeddingService?: EmbeddingService;
   /** Top-K candidates per new memory (default: 5) */
@@ -81,7 +81,7 @@ export async function batchDedup(params: {
     }));
 
   // Determine what recall capabilities are available
-  const hasVectorData = vectorStore && vectorStore.count() > 0;
+  const hasVectorData = vectorStore && (await vectorStore.countL1()) > 0;
   const hasFts = vectorStore?.isFtsAvailable() ?? false;
 
   // Fast path: no recall capability at all → skip dedup
@@ -109,7 +109,7 @@ export async function batchDedup(params: {
       );
       // Degrade to FTS keyword recall
       if (hasFts) {
-        matches = findCandidatesByFts(memories, vectorStore!, logger);
+        matches = await findCandidatesByFts(memories, vectorStore!, logger);
       } else {
         logger?.debug?.(`${TAG} FTS not available either, skipping conflict detection`);
         return storeAll();
@@ -118,7 +118,7 @@ export async function batchDedup(params: {
   } else if (hasFts) {
     // === Tier 2: FTS keyword recall ===
     logger?.debug?.(`${TAG} Using FTS keyword recall mode (no embedding service or no vector data)`);
-    matches = findCandidatesByFts(memories, vectorStore!, logger);
+    matches = await findCandidatesByFts(memories, vectorStore!, logger);
   } else {
     // Shouldn't reach here given the fast-path check above, but be defensive
     logger?.debug?.(`${TAG} No usable recall path, skipping conflict detection`);
@@ -191,7 +191,7 @@ async function runLlmJudgment(
  */
 async function findCandidatesByVector(
   memories: Array<ExtractedMemory & { record_id: string }>,
-  vectorStore: VectorStore,
+  vectorStore: IMemoryStore,
   embeddingService: EmbeddingService,
   topK: number,
   logger?: Logger,
@@ -209,7 +209,7 @@ async function findCandidatesByVector(
     const queryVec = embeddings[i];
 
     // Vector search top-K (request extra to account for self-batch filtering)
-    const searchResults = vectorStore.search(queryVec, topK + memories.length);
+    const searchResults = await vectorStore.searchL1Vector(queryVec, topK + memories.length, mem.content);
 
     // Exclude records from current batch, convert to MemoryRecord format
     const candidates: MemoryRecord[] = searchResults
@@ -245,18 +245,18 @@ async function findCandidatesByVector(
  * Uses the FTS index for efficient BM25-ranked keyword matching.
  * This replaces the old Jaccard word-overlap fallback entirely.
  */
-function findCandidatesByFts(
+async function findCandidatesByFts(
   memories: Array<ExtractedMemory & { record_id: string }>,
-  vectorStore: VectorStore,
+  vectorStore: IMemoryStore,
   _logger?: Logger,
-): CandidateMatch[] {
+): Promise<CandidateMatch[]> {
   const newRecordIds = new Set(memories.map((m) => m.record_id));
   const matches: CandidateMatch[] = [];
 
   for (const mem of memories) {
     const ftsQuery = buildFtsQuery(mem.content);
     if (ftsQuery) {
-      const ftsResults = vectorStore.ftsSearchL1(ftsQuery, 10);
+      const ftsResults = await vectorStore.searchL1Fts(ftsQuery, 10);
       // Filter out records from the current batch
       const candidates: MemoryRecord[] = ftsResults
         .filter((r) => !newRecordIds.has(r.record_id))
@@ -333,6 +333,11 @@ function parseBatchResult(
       const d = item as Record<string, unknown>;
 
       const recordId = String(d.record_id ?? "");
+      // Skip entries with empty/missing record_id — they are LLM hallucinations
+      if (!recordId) {
+        logger?.debug?.(`${TAG} Skipping decision with empty record_id`);
+        continue;
+      }
       const action = String(d.action ?? "store");
 
       if (!validActions.includes(action)) {

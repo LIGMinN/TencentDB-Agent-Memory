@@ -19,7 +19,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { VectorStore } from "../store/vector-store.js";
+import type { IMemoryStore } from "../store/types.js";
 import type { EmbeddingService } from "../store/embedding.js";
 
 // ============================
@@ -149,7 +149,7 @@ export async function writeMemory(params: {
   sessionId?: string;
   logger?: Logger;
   /** Optional vector store for dual-write (JSONL + vector DB) */
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   /** Optional embedding service (required when vectorStore is provided) */
   embeddingService?: EmbeddingService;
 }): Promise<MemoryRecord | null> {
@@ -208,7 +208,7 @@ export async function writeMemory(params: {
     // by memory-cleaner (which reconciles against VectorStore as source of truth).
     if (vectorStore) {
       try {
-        vectorStore.deleteBatch(decision.target_ids);
+        await vectorStore.deleteL1Batch(decision.target_ids);
         logger?.debug?.(`${TAG} VectorStore: deleted ${decision.target_ids.length} target record(s) for ${decision.action}`);
       } catch (err) {
         logger?.warn?.(
@@ -251,7 +251,7 @@ export async function writeMemory(params: {
         }
       }
 
-      const upsertOk = vectorStore.upsert(record, embedding);
+      const upsertOk = await vectorStore.upsertL1(record, embedding);
       logger?.debug?.(`${TAG} [vec-dual-write] upsert result=${upsertOk} id=${record.id}`);
     } catch (err) {
       // Vector write failure should NOT block the main JSONL write

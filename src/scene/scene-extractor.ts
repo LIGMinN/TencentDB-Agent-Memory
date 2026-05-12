@@ -89,7 +89,7 @@ export class SceneExtractor {
 
   constructor(opts: SceneExtractorOptions) {
     this.dataDir = opts.dataDir;
-    this.maxScenes = opts.maxScenes ?? 20;
+    this.maxScenes = opts.maxScenes ?? 15;
     this.sceneBackupCount = opts.sceneBackupCount ?? 10;
     this.timeoutMs = opts.timeoutMs ?? 300_000; // 5 min — LLM may do multiple tool calls
     this.logger = opts.logger;
@@ -190,6 +190,7 @@ export class SceneExtractor {
       currentTimestamp,
       sceneCountWarning,
       existingSceneFiles,
+      maxScenes: this.maxScenes,
     });
     this.logger?.debug?.(`${TAG} extract() prompt built: ${prompt.length} chars (${Date.now() - promptStartMs}ms)`);
 
@@ -218,20 +219,34 @@ export class SceneExtractor {
     // Phase 5: Subsequent processing — safe cleanup of soft-deleted files
     //
     // Security: The LLM has no `exec` tool and cannot run shell commands.
-    // Instead, it "deletes" files by writing empty content (soft-delete).
-    // Here we detect and remove those empty files before syncing the index,
-    // so syncSceneIndex won't re-index stale empty entries.
+    // Instead, it "deletes" files by writing the marker `[DELETED]` to the file
+    // (writing empty/whitespace-only content is rejected by core's write tool
+    // parameter validation). Here we detect and remove those soft-deleted files
+    // before syncing the index, so syncSceneIndex won't re-index stale entries.
+    //
+    // We also detect "META-only" files — files that contain only a META header
+    // (e.g. [ARCHIVE] or [CONSOLIDATED] markers) but no actual scene content.
+    // These are artifacts of LLM merges that didn't properly delete old files.
     const cleanupStartMs = Date.now();
     let cleanedCount = 0;
     try {
       const allFiles = (await fs.readdir(sceneBlocksDir)).filter((f) => f.endsWith(".md"));
       for (const file of allFiles) {
         const filePath = path.join(sceneBlocksDir, file);
-        const content = await fs.readFile(filePath, "utf-8");
-        if (content.trim().length === 0) {
+        const raw = await fs.readFile(filePath, "utf-8");
+        if (raw.trim().length === 0 || raw.trim() === "[DELETED]") {
+          // Empty file or [DELETED] marker — soft-delete
           await fs.unlink(filePath);
           cleanedCount++;
           this.logger?.debug?.(`${TAG} extract() removed soft-deleted file: ${file}`);
+        } else {
+          // Check if file has only META header but no actual content
+          const block = parseSceneBlock(raw, file);
+          if (!block.content || block.content.trim().length === 0) {
+            await fs.unlink(filePath);
+            cleanedCount++;
+            this.logger?.debug?.(`${TAG} extract() removed META-only file (no content): ${file}`);
+          }
         }
       }
     } catch (cleanupErr) {

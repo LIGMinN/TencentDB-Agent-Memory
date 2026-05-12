@@ -160,7 +160,7 @@ export async function recordConversation(params: {
   //   - If a message lacks a timestamp field, extractUserAssistantMessages()
   //     assigns Date.now() at extraction time, which is always > previous cursor.
   const cursor = afterTimestamp ?? 0;
-  const extracted = cursor > 0
+  const extracted = cursor !== 0
     ? allExtracted.filter((m) => m.timestamp > cursor)
     : allExtracted;
 
@@ -440,7 +440,7 @@ export async function readConversationMessages(
  */
 export interface SessionIdMessageGroup {
   sessionId: string;
-  messages: ConversationMessage[];
+  messages: Array<ConversationMessage & { recordedAtMs: number }>;
 }
 
 /**
@@ -451,29 +451,32 @@ export interface SessionIdMessageGroup {
  * so that each group's sessionId is correctly associated with its extracted memories.
  *
  * When `limit` is provided, only the **newest** `limit` messages (across all groups)
- * are retained — matching the DB path's `ORDER BY timestamp DESC LIMIT ?` behavior.
+ * are retained — matching the DB path's `ORDER BY recorded_at DESC LIMIT ?` behavior.
  * Groups that become empty after truncation are dropped.
  *
  * Groups are returned in chronological order (by earliest message timestamp).
  * Messages within each group are also in chronological order.
+ *
+ * @param afterRecordedAtMs - Epoch ms cursor: only messages with recordedAt > this are included.
  */
 export async function readConversationMessagesGroupedBySessionId(
   sessionKey: string,
   baseDir: string,
-  afterTimestamp?: number,
+  afterRecordedAtMs?: number,
   logger?: Logger,
   limit?: number,
 ): Promise<SessionIdMessageGroup[]> {
   const records = await readConversationRecords(sessionKey, baseDir, logger);
 
-  // Collect all messages with their sessionId, respecting afterTimestamp filter
-  const allMessages: Array<{ sessionId: string; msg: ConversationMessage }> = [];
+  // Collect all messages with their sessionId, filtering by recorded_at cursor
+  const allMessages: Array<{ sessionId: string; msg: ConversationMessage & { recordedAtMs: number } }> = [];
 
   for (const record of records) {
     const sid = record.sessionId || "";
+    const recMs = Date.parse(record.recordedAt) || 0;
+    if (afterRecordedAtMs && recMs <= afterRecordedAtMs) continue;
     for (const msg of record.messages) {
-      if (afterTimestamp && msg.timestamp <= afterTimestamp) continue;
-      allMessages.push({ sessionId: sid, msg });
+      allMessages.push({ sessionId: sid, msg: { ...msg, recordedAtMs: recMs } });
     }
   }
 
@@ -491,7 +494,7 @@ export async function readConversationMessagesGroupedBySessionId(
   }
 
   // Re-group by sessionId
-  const groupMap = new Map<string, ConversationMessage[]>();
+  const groupMap = new Map<string, Array<ConversationMessage & { recordedAtMs: number }>>();
   for (const { sessionId, msg } of selected) {
     let group = groupMap.get(sessionId);
     if (!group) {

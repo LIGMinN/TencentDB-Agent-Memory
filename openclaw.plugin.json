@@ -6,6 +6,12 @@
     "type": "object",
     "additionalProperties": true,
     "properties": {
+      "storeBackend": {
+        "type": "string",
+        "enum": ["sqlite", "tcvdb"],
+        "default": "sqlite",
+        "description": "存储后端：sqlite（本地 SQLite + sqlite-vec）或 tcvdb（腾讯云向量数据库）"
+      },
       "capture": {
         "type": "object",
         "description": "对话自动捕获设置 (L0)",
@@ -32,7 +38,7 @@
         "description": "场景归纳与用户画像设置 (L2/L3)",
         "properties": {
           "triggerEveryN": { "type": "number", "default": 50, "description": "每 N 条新记忆触发画像生成" },
-          "maxScenes": { "type": "number", "default": 20, "description": "最大场景数" },
+          "maxScenes": { "type": "number", "default": 15, "description": "最大场景数" },
           "backupCount": { "type": "number", "default": 3, "description": "画像备份保留数量" },
           "sceneBackupCount": { "type": "number", "default": 10, "description": "场景块备份保留数量" },
           "model": { "type": "string", "description": "画像生成模型 (格式: provider/model)，未填写时使用openclaw默认模型" }
@@ -66,7 +72,7 @@
         "type": "object",
         "description": "向量搜索 (Embedding) 配置",
         "properties": {
-          "enabled": { "type": "boolean", "default": true, "description": "是否启用向量搜索" },
+          "enabled": { "type": "boolean", "default": true, "description": "是否启用向量搜索（若 provider=none，则实际会被禁用）" },
           "provider": { "type": "string", "default": "none", "description": "Embedding 服务提供者：填写兼容 OpenAI API 的远端服务名称（如 openai、deepseek 等）；不填或填 none 则禁用向量搜索" },
           "proxyUrl": { "type": "string", "description": "本地代理地址（仅 provider=qclaw 时必填）。配置后 embedding 请求将通过该代理转发，原始 baseUrl 作为 Remote-URL 头传递" },
           "baseUrl": { "type": "string", "description": "API Base URL（必填）：填写对应 provider 的 API 地址" },
@@ -74,7 +80,30 @@
           "model": { "type": "string", "description": "模型名称（必填）" },
           "dimensions": { "type": "number", "description": "向量维度（必填，需与所选模型匹配）" },
           "conflictRecallTopK": { "type": "number", "default": 5, "description": "冲突检测时召回 Top-K 数" },
-          "maxInputChars": { "type": "number", "default": 5000, "description": "Embedding 输入文本最大字符数，超出时截断并打印警告日志（默认 5000，适合大多数模型的 token 上限）" }
+          "maxInputChars": { "type": "number", "default": 5000, "description": "Embedding 输入文本最大字符数，超出时截断并打印警告日志（默认 5000，适合大多数模型的 token 上限）" },
+          "timeoutMs": { "type": "number", "default": 10000, "description": "单次 embedding API 调用超时（毫秒），超时后该次请求中止且不重试" }
+        }
+      },
+      "tcvdb": {
+        "type": "object",
+        "description": "腾讯云向量数据库配置（仅 storeBackend=tcvdb 时生效）",
+        "properties": {
+          "url": { "type": "string", "description": "实例 URL（必填，如 http://10.0.1.1:8100）" },
+          "username": { "type": "string", "default": "root", "description": "账户名" },
+          "apiKey": { "type": "string", "description": "API Key（必填）" },
+          "database": { "type": "string", "description": "数据库名（未填写时默认根据实例 ID 自动生成）" },
+          "alias": { "type": "string", "description": "用户友好别名（可选，用于 database.json 中识别）" },
+          "embeddingModel": { "type": "string", "default": "bge-large-zh", "description": "服务端 embedding 模型" },
+          "timeout": { "type": "number", "default": 10000, "description": "请求超时（毫秒）" },
+          "caPemPath": { "type": "string", "description": "CA 证书 PEM 文件路径（HTTPS 连接时使用）" }
+        }
+      },
+      "bm25": {
+        "type": "object",
+        "description": "BM25 稀疏向量编码设置（主要用于 tcvdb 后端）",
+        "properties": {
+          "enabled": { "type": "boolean", "default": true, "description": "是否启用 BM25 稀疏向量编码" },
+          "language": { "type": "string", "enum": ["zh", "en"], "default": "zh", "description": "分词语言：zh（中文）或 en（英文）" }
         }
       },
       "report": {

@@ -14,11 +14,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { MemoryRecord, MemoryType, EpisodicMetadata } from "./l1-writer.js";
-import type { VectorStore, L1RecordRow, L1QueryFilter } from "../store/vector-store.js";
+import type { IMemoryStore, L1RecordRow, L1QueryFilter } from "../store/types.js";
 
 // Re-export types that readers need
 export type { MemoryRecord, MemoryType, EpisodicMetadata } from "./l1-writer.js";
-export type { L1QueryFilter } from "../store/vector-store.js";
+export type { L1QueryFilter } from "../store/types.js";
 
 interface Logger {
   debug?: (message: string) => void;
@@ -44,17 +44,17 @@ const TAG = "[memory-tdai] [l1-reader]";
  *
  * Falls back to empty array if VectorStore is null or degraded.
  */
-export function queryMemoryRecords(
-  vectorStore: VectorStore | null | undefined,
+export async function queryMemoryRecords(
+  vectorStore: IMemoryStore | null | undefined,
   filter?: L1QueryFilter,
   logger?: Logger,
-): MemoryRecord[] {
+): Promise<MemoryRecord[]> {
   if (!vectorStore) {
     logger?.warn(`${TAG} queryMemoryRecords: no VectorStore available, returning empty`);
     return [];
   }
 
-  const rows = vectorStore.queryL1Records(filter);
+  const rows = await vectorStore.queryL1Records(filter);
   return rows.map(rowToMemoryRecord);
 }
 

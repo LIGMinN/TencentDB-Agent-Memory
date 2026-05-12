@@ -53,9 +53,9 @@ export class PersonaGenerator {
   }
 
   /**
-   * Execute persona generation.
+   * Execute local persona generation without advancing checkpoint.
    */
-  async generate(triggerReason?: string): Promise<boolean> {
+  async generateLocalPersona(triggerReason?: string): Promise<boolean> {
     const startMs = Date.now();
     this.logger?.debug?.(`${TAG} Starting generation: reason="${triggerReason ?? "none"}"`);
 
@@ -181,9 +181,6 @@ export class PersonaGenerator {
     const finalContent = nav ? `${personaText}\n\n${nav}\n` : personaText;
     await fs.writeFile(personaPath, finalContent, "utf-8");
 
-    // 12. Update checkpoint
-    await cpManager.markPersonaGenerated(cp.total_processed);
-
     const elapsedMs = Date.now() - startMs;
     this.logger?.info(`${TAG} Persona written (${finalContent.length} chars) in ${elapsedMs}ms`);
 
@@ -200,6 +197,19 @@ export class PersonaGenerator {
       });
     }
 
+    return true;
+  }
+
+  /**
+   * Backward-compatible wrapper: local generation + checkpoint advance.
+   */
+  async generate(triggerReason?: string): Promise<boolean> {
+    const updated = await this.generateLocalPersona(triggerReason);
+    if (!updated) return false;
+
+    const cpManager = new CheckpointManager(this.dataDir);
+    const cp = await cpManager.read();
+    await cpManager.markPersonaGenerated(cp.total_processed);
     return true;
   }
 }

@@ -16,7 +16,7 @@ import { CheckpointManager } from "../utils/checkpoint.js";
 import type { MemoryPipelineManager } from "../utils/pipeline-manager.js";
 import { recordConversation } from "../conversation/l0-recorder.js";
 import type { ConversationMessage } from "../conversation/l0-recorder.js";
-import type { VectorStore, L0VectorRecord } from "../store/vector-store.js";
+import type { IMemoryStore, L0Record } from "../store/types.js";
 import type { EmbeddingService } from "../store/embedding.js";
 
 const TAG = "[memory-tdai] [capture]";
@@ -68,7 +68,7 @@ export async function performAutoCapture(params: {
    *  prevents the first agent_end from dumping all session history into L0. */
   pluginStartTimestamp?: number;
   /** VectorStore for L0 vector indexing (optional). */
-  vectorStore?: VectorStore;
+  vectorStore?: IMemoryStore;
   /** EmbeddingService for L0 vector indexing (optional). */
   embeddingService?: EmbeddingService;
 }): Promise<AutoCaptureResult> {
@@ -131,32 +131,42 @@ export async function performAutoCapture(params: {
   const tL0RecordEnd = performance.now();
 
   // ============================
-  // Step 1.5: L0 vector indexing — metadata written synchronously,
-  //           embedding done in background (non-blocking)
+  // Step 1.5: L0 vector indexing
   // ============================
-  // PERF FIX: Remote embedding API calls (2-3s each) were blocking
-  // the agent_end hook, adding 5-9s latency per conversation round.
-  // Now we:
-  //   1. Write L0 metadata + FTS immediately (no embedding) — ~10ms
-  //   2. Fire off background task to embed + update vectors (non-blocking)
-  // This way the user gets their response immediately.
+  // Two paths depending on store capabilities:
+  //
+  // A) Store supports updateL0Embedding (sqlite):
+  //    - Write metadata + FTS immediately WITHOUT embedding (~ms)
+  //    - Fire-and-forget background task: embedBatch + updateL0Embedding
+  //    - PERF: avoids blocking agent_end with 2-3s embedding calls
+  //
+  // B) Store does NOT support updateL0Embedding (VDB / remote):
+  //    - Embed synchronously, then upsertL0 with embedding in one call
+  //    - VDB backends handle embedding server-side or need it upfront
   const tL0VecStart = performance.now();
   let l0VectorsWritten = 0;
+  let l0EmbedTotalMs = 0;
+  let l0UpsertTotalMs = 0;
   logger?.debug?.(
     `${TAG} [L0-vec-index] Check: filteredMessages=${filteredMessages.length}, ` +
     `vectorStore=${vectorStore ? "available" : "UNAVAILABLE"}, ` +
     `embeddingService=${embeddingService ? "available" : "UNAVAILABLE"}`,
   );
 
-  // Pre-generate L0 records and write metadata synchronously (fast path)
-  const l0Records: Array<{ record: L0VectorRecord; content: string }> = [];
+  const supportsBgEmbed = vectorStore?.supportsDeferredEmbedding === true;
+
   if (filteredMessages.length > 0 && vectorStore) {
     const now = new Date().toISOString();
-    logger?.debug?.(`${TAG} [L0-vec-index] START indexing ${filteredMessages.length} message(s) for session ${sessionKey}`);
+    const bgRecords: Array<{ recordId: string; content: string }> = [];
+    logger?.debug?.(
+      `${TAG} [L0-vec-index] START indexing ${filteredMessages.length} message(s) for session ${sessionKey} ` +
+      `(mode=${supportsBgEmbed ? "async-bg" : "sync"})`,
+    );
+
     for (let i = 0; i < filteredMessages.length; i++) {
       const msg = filteredMessages[i];
       try {
-        const l0Record: L0VectorRecord = {
+        const l0Record: L0Record = {
           id: generateL0RecordId(sessionKey, i),
           sessionKey,
           sessionId: sessionId || "",
@@ -166,11 +176,45 @@ export async function performAutoCapture(params: {
           timestamp: msg.timestamp,
         };
 
-        // Write metadata + FTS immediately WITHOUT embedding (fast, ~ms)
-        const upsertOk = vectorStore.upsertL0(l0Record, undefined);
+        let embedding: Float32Array | undefined;
+
+        if (!supportsBgEmbed && embeddingService) {
+          // Path B (VDB): embed synchronously — needed for upsertL0
+          // Skip local embed when using server-side embedding (NoopEmbeddingService, dims=0)
+          if (embeddingService.getDimensions() === 0) {
+            logger?.debug?.(
+              `${TAG} [L0-vec-index] Server-side embedding (dims=0), skipping local embed for message ${i}`,
+            );
+          } else {
+            const tEmbedStart = performance.now();
+            try {
+              embedding = await embeddingService.embed(msg.content);
+              l0EmbedTotalMs += performance.now() - tEmbedStart;
+              logger?.debug?.(
+                `${TAG} [L0-vec-index] Embedding OK: dims=${embedding.length}, ` +
+                `norm=${Math.sqrt(Array.from(embedding).reduce((s, v) => s + v * v, 0)).toFixed(4)}`,
+              );
+            } catch (embedErr) {
+              l0EmbedTotalMs += performance.now() - tEmbedStart;
+              logger?.warn(
+                `${TAG} [L0-vec-index] Embedding FAILED for message ${i}, ` +
+                `will write metadata only: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`,
+              );
+            }
+          }
+        }
+
+        // Path A (sqlite): pass undefined embedding — metadata + FTS only
+        // Path B (VDB): pass embedding (may be undefined on failure)
+        const tUpsertStart = performance.now();
+        const upsertOk = await vectorStore.upsertL0(l0Record, supportsBgEmbed ? undefined : embedding);
+        l0UpsertTotalMs += performance.now() - tUpsertStart;
+
         if (upsertOk) {
           l0VectorsWritten++;
-          l0Records.push({ record: l0Record, content: msg.content });
+          if (supportsBgEmbed) {
+            bgRecords.push({ recordId: l0Record.id, content: msg.content });
+          }
         } else {
           logger?.warn(`${TAG} [L0-vec-index] upsertL0 returned false for message ${i}`);
         }
@@ -178,38 +222,39 @@ export async function performAutoCapture(params: {
         logger?.warn?.(`${TAG} [L0-vec-index] FAILED for message ${i} (non-blocking): ${err instanceof Error ? err.message : String(err)}`);
       }
     }
-    logger?.debug?.(`${TAG} [L0-vec-index] DONE: ${l0VectorsWritten}/${filteredMessages.length} metadata records written (sync)`);
 
-    // Fire-and-forget: batch embed + update vectors in background
-    if (l0Records.length > 0 && embeddingService) {
-      const bgVectorStore = vectorStore; // capture for closure
+    const modeLabel = supportsBgEmbed ? "metadata-only, embed=background" : `embed=${l0EmbedTotalMs.toFixed(0)}ms, upsert=${l0UpsertTotalMs.toFixed(0)}ms`;
+    logger?.debug?.(`${TAG} [L0-vec-index] DONE: ${l0VectorsWritten}/${filteredMessages.length} records written (${modeLabel})`);
+
+    // Path A only: fire-and-forget background embedding for sqlite stores
+    if (supportsBgEmbed && bgRecords.length > 0 && embeddingService) {
+      const bgVectorStore = vectorStore;
       const bgEmbeddingService = embeddingService;
-      const bgRecords = [...l0Records]; // snapshot
+      const bgSnapshot = [...bgRecords];
       const bgLogger = logger;
 
-      // Do NOT await — this runs in background after response is sent
+      // Do NOT await — runs in background after response is sent
       void (async () => {
         const tBgStart = performance.now();
         try {
-          // Use embedBatch for a single API call instead of N sequential calls
-          const texts = bgRecords.map((r) => r.content);
+          const texts = bgSnapshot.map((r) => r.content);
           const embeddings = await bgEmbeddingService.embedBatch(texts);
 
           let bgUpdated = 0;
-          for (let i = 0; i < bgRecords.length; i++) {
+          for (let i = 0; i < bgSnapshot.length; i++) {
             try {
-              const ok = bgVectorStore.updateL0Embedding(bgRecords[i].record.id, embeddings[i]);
+              const ok = await bgVectorStore.updateL0Embedding!(bgSnapshot[i].recordId, embeddings[i]);
               if (ok) bgUpdated++;
             } catch (err) {
               bgLogger?.warn?.(
-                `${TAG} [L0-vec-index-bg] Failed to update embedding for ${bgRecords[i].record.id}: ` +
+                `${TAG} [L0-vec-index-bg] Failed to update embedding for ${bgSnapshot[i].recordId}: ` +
                 `${err instanceof Error ? err.message : String(err)}`,
               );
             }
           }
           const bgMs = performance.now() - tBgStart;
           bgLogger?.debug?.(
-            `${TAG} [L0-vec-index-bg] Background embedding complete: ${bgUpdated}/${bgRecords.length} vectors updated (${bgMs.toFixed(0)}ms)`,
+            `${TAG} [L0-vec-index-bg] Background embedding complete: ${bgUpdated}/${bgSnapshot.length} vectors updated (${bgMs.toFixed(0)}ms)`,
           );
         } catch (err) {
           const bgMs = performance.now() - tBgStart;
@@ -235,11 +280,13 @@ export async function performAutoCapture(params: {
     logger?.debug?.(`${TAG} Scheduler notified of conversation round (sessionKey=${sessionKey})`);
 
     const totalMs = performance.now() - tCaptureStart;
+    const vecDetail = supportsBgEmbed
+      ? `metadata-only, embed=background, msgs=${filteredMessages.length}`
+      : `embed=${l0EmbedTotalMs.toFixed(0)}ms, upsert=${l0UpsertTotalMs.toFixed(0)}ms, msgs=${filteredMessages.length}`;
     logger?.info(
       `${TAG} ⏱ Capture timing: total=${totalMs.toFixed(0)}ms, ` +
       `l0Record+checkpoint=${(tL0RecordEnd - tL0RecordStart).toFixed(0)}ms, ` +
-      `l0VecIndex=${(tL0VecEnd - tL0VecStart).toFixed(0)}ms ` +
-      `(metadata-only, embed=background, msgs=${filteredMessages.length}), ` +
+      `l0VecIndex=${(tL0VecEnd - tL0VecStart).toFixed(0)}ms (${vecDetail}), ` +
       `notify=${(performance.now() - tNotifyStart).toFixed(0)}ms`,
     );
 
@@ -252,11 +299,13 @@ export async function performAutoCapture(params: {
   }
 
   const totalMs = performance.now() - tCaptureStart;
+  const vecDetail = supportsBgEmbed
+    ? `metadata-only, embed=background, msgs=${filteredMessages.length}`
+    : `embed=${l0EmbedTotalMs.toFixed(0)}ms, upsert=${l0UpsertTotalMs.toFixed(0)}ms, msgs=${filteredMessages.length}`;
   logger?.info(
     `${TAG} ⏱ Capture timing: total=${totalMs.toFixed(0)}ms, ` +
     `l0Record+checkpoint=${(tL0RecordEnd - tL0RecordStart).toFixed(0)}ms, ` +
-    `l0VecIndex=${(tL0VecEnd - tL0VecStart).toFixed(0)}ms ` +
-    `(metadata-only, embed=background, msgs=${filteredMessages.length}), ` +
+    `l0VecIndex=${(tL0VecEnd - tL0VecStart).toFixed(0)}ms (${vecDetail}), ` +
     `notify=${(performance.now() - tNotifyStart).toFixed(0)}ms`,
   );
 

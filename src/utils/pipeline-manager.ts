@@ -262,7 +262,7 @@ export class MemoryPipelineManager {
     this.logger = logger;
     this.sessionFilter = sessionFilter ?? new SessionFilter();
 
-    this.logger?.info(
+    this.logger?.debug?.(
       `${TAG} Initialized: everyNConversations=${config.everyNConversations}, ` +
       `warmup=${config.enableWarmup ? "enabled" : "disabled"}, ` +
       `l1IdleTimeout=${config.l1.idleTimeoutSeconds}s, ` +
@@ -1076,12 +1076,22 @@ export class MemoryPipelineManager {
     return this.destroyed;
   }
 
-  /** Queue sizes for monitoring. */
-  getQueueSizes(): { l1: number; l2: number; l3: number } {
+  /** Queue sizes and running state for monitoring. */
+  getQueueSizes(): {
+    l1: number; l2: number; l3: number;
+    l1Pending: boolean; l2Pending: boolean; l3Pending: boolean;
+    l1Idle: boolean; l2Idle: boolean; l3Idle: boolean;
+  } {
     return {
       l1: this.l1Queue.size,
       l2: this.l2Queue.size,
       l3: this.l3Queue.size,
+      l1Pending: this.l1Queue.pending,
+      l2Pending: this.l2Queue.pending,
+      l3Pending: this.l3Queue.pending,
+      l1Idle: this.l1Queue.idle,
+      l2Idle: this.l2Queue.idle,
+      l3Idle: this.l3Queue.idle,
     };
   }
 }

@@ -14,6 +14,7 @@ import fsSync from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
 import { report } from "../report/reporter.js";
 
 /**
@@ -55,7 +56,42 @@ interface RunnerLogger {
 }
 
 // Dynamic import type — runEmbeddedPiAgent is an internal API
-type RunEmbeddedPiAgentFn = (params: Record<string, unknown>) => Promise<unknown>;
+// Prefer the public plugin runtime signature so host-injected runtimes stay assignable.
+type RunEmbeddedPiAgentFn = OpenClawPluginApi["runtime"]["agent"]["runEmbeddedPiAgent"];
+
+export interface EmbeddedAgentRuntimeLike {
+  runEmbeddedPiAgent?: RunEmbeddedPiAgentFn;
+}
+
+let _preferredAgentRuntime: EmbeddedAgentRuntimeLike | undefined;
+
+export function setPreferredEmbeddedAgentRuntime(
+  agentRuntime: EmbeddedAgentRuntimeLike | undefined,
+): void {
+  _preferredAgentRuntime = agentRuntime;
+}
+
+function resolveInjectedRunEmbeddedPiAgent(
+  agentRuntime?: EmbeddedAgentRuntimeLike,
+): RunEmbeddedPiAgentFn | undefined {
+  const candidate =
+    agentRuntime?.runEmbeddedPiAgent ?? _preferredAgentRuntime?.runEmbeddedPiAgent;
+  return typeof candidate === "function" ? candidate : undefined;
+}
+
+async function resolveRunEmbeddedPiAgent(
+  agentRuntime: EmbeddedAgentRuntimeLike | undefined,
+  logger?: RunnerLogger,
+): Promise<RunEmbeddedPiAgentFn> {
+  const injected = resolveInjectedRunEmbeddedPiAgent(agentRuntime);
+  if (injected) {
+    logger?.debug?.(
+      `${TAG} resolveRunEmbeddedPiAgent: using injected runtime.agent.runEmbeddedPiAgent`,
+    );
+    return injected;
+  }
+  return loadRunEmbeddedPiAgent(logger);
+}
 
 // ── Core import (mirrors voice-call/core-bridge.ts — dist/ only, no jiti) ──
 
@@ -123,7 +159,17 @@ function loadRunEmbeddedPiAgent(logger?: RunnerLogger): Promise<RunEmbeddedPiAge
  * the cold-start penalty on the first actual extraction run.
  * Returns immediately (fire-and-forget) — errors are swallowed.
  */
-export function prewarmEmbeddedAgent(logger?: RunnerLogger): void {
+export function prewarmEmbeddedAgent(
+  logger?: RunnerLogger,
+  agentRuntime?: EmbeddedAgentRuntimeLike,
+): void {
+  if (resolveInjectedRunEmbeddedPiAgent(agentRuntime)) {
+    logger?.debug?.(
+      `${TAG} prewarmEmbeddedAgent: runtime capability already available, skipping legacy preload`,
+    );
+    return;
+  }
+
   loadRunEmbeddedPiAgent(logger).catch((err) => {
     logger?.warn(`${TAG} prewarmEmbeddedAgent: failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
   });
@@ -232,6 +278,8 @@ export interface CleanContextRunnerOptions {
    * automatically falls back to the main config's `agents.defaults.model`.
    */
   modelRef?: string;
+  /** Preferred runtime seam. When absent, falls back to the legacy dist bridge. */
+  agentRuntime?: EmbeddedAgentRuntimeLike;
   /** Allow the LLM to use tools (read_file, write_to_file, etc). Default: false */
   enableTools?: boolean;
   /** Logger instance for detailed tracing */
@@ -318,11 +366,14 @@ export class CleanContextRunner {
     try {
       const sessionFile = path.join(tmpDir, "session.json");
 
-      // Phase 1: Load runEmbeddedPiAgent (fast if dist/ exists or already cached)
+      // Phase 1: Resolve runEmbeddedPiAgent (prefer runtime, fallback to legacy dist bridge)
       const importStartMs = Date.now();
-      const runEmbeddedPiAgent = await loadRunEmbeddedPiAgent(this.logger);
+      const runEmbeddedPiAgent = await resolveRunEmbeddedPiAgent(
+        this.options.agentRuntime,
+        this.logger,
+      );
       const importElapsedMs = Date.now() - importStartMs;
-      this.logger?.debug?.(`${TAG} run() dynamic import phase: ${importElapsedMs}ms`);
+      this.logger?.debug?.(`${TAG} run() runner resolution phase: ${importElapsedMs}ms`);
 
       // Derive a config with plugins disabled to prevent loadOpenClawPlugins
       // from re-registering plugins when the workspaceDir differs from the
@@ -347,10 +398,10 @@ export class CleanContextRunner {
         },
       };
 
-      // Build the effective prompt:
-      // If systemPrompt is provided, pass it as a separate parameter to the agent
-      // and use `prompt` as the user message. Fallback: prepend to prompt if the
-      // embedded agent doesn't support systemPrompt natively.
+      // Build the effective prompt.
+      // Keep prepending the optional systemPrompt into the user-visible prompt so
+      // runtime and legacy fallback paths preserve the same behavior without
+      // relying on a newer native extraSystemPrompt contract.
       const effectivePrompt = params.systemPrompt
         ? `${params.systemPrompt}\n\n---\n\n${params.prompt}`
         : params.prompt;
@@ -368,7 +419,6 @@ export class CleanContextRunner {
         workspaceDir: cleanWorkspace,
         config: cleanConfig,
         prompt: effectivePrompt,
-        systemPrompt: params.systemPrompt,
         timeoutMs: params.timeoutMs ?? 120_000,
         runId,
         provider: this.resolvedProvider,

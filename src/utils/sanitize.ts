@@ -38,6 +38,9 @@ export function sanitizeText(text: string): string {
   // Remove framework reply directive tags: [[reply_to_current]], [[reply_to_xxx]], etc.
   cleaned = cleaned.replace(/\[\[reply_to[^\]]*\]\]\s*/g, "");
 
+  // Remove injected skill-selection wrappers, e.g. ¥¥[... ]¥¥
+  cleaned = cleaned.replace(/¥¥\[[\s\S]*?\]¥¥/g, "");
+
   // Remove line-leading timestamps, e.g. "[Tue 2026-03-24 03:48 UTC]"
   // or "[Tue 2026-03-24 20:21 GMT+8]", "[Thu 2026-03-24 01:51 GMT+5:30]"
   // Matches brackets containing word chars, digits, hyphens, colons, plus signs,

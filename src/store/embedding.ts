@@ -149,10 +149,20 @@ function sanitizeAndNormalize(vec: number[] | Float32Array): Float32Array {
  */
 type LocalInitState = "idle" | "initializing" | "ready" | "failed";
 
+/** Function that dynamically imports node-llama-cpp. Overridable for testing. */
+export type ImportLlamaFn = () => Promise<{
+  getLlama: (opts: { logLevel: number }) => Promise<unknown>;
+  resolveModelFile: (model: string, cacheDir?: string) => Promise<string>;
+  LlamaLogLevel: { error: number };
+}>;
+
+const defaultImportLlama: ImportLlamaFn = () => import("node-llama-cpp") as unknown as ReturnType<ImportLlamaFn>;
+
 export class LocalEmbeddingService implements EmbeddingService {
   private readonly modelPath: string;
   private readonly modelCacheDir?: string;
   private readonly logger?: Logger;
+  private readonly importLlama: ImportLlamaFn;
 
   // Initialization state machine
   private initState: LocalInitState = "idle";
@@ -162,10 +172,11 @@ export class LocalEmbeddingService implements EmbeddingService {
     getEmbeddingFor: (text: string) => Promise<{ vector: Float32Array | number[] }>;
   } | null = null;
 
-  constructor(config?: LocalEmbeddingConfig, logger?: Logger) {
+  constructor(config?: LocalEmbeddingConfig, logger?: Logger, importLlama?: ImportLlamaFn) {
     this.modelPath = config?.modelPath?.trim() || DEFAULT_LOCAL_MODEL;
     this.modelCacheDir = config?.modelCacheDir?.trim();
     this.logger = logger;
+    this.importLlama = importLlama ?? defaultImportLlama;
   }
 
   getDimensions(): number {
@@ -307,7 +318,7 @@ export class LocalEmbeddingService implements EmbeddingService {
       this.logger?.debug?.(`${TAG} Loading node-llama-cpp for local embedding...`);
 
       // Dynamic import — node-llama-cpp is a peer dependency of OpenClaw
-      const { getLlama, resolveModelFile, LlamaLogLevel } = await import("node-llama-cpp");
+      const { getLlama, resolveModelFile, LlamaLogLevel } = await this.importLlama();
 
       const llama = await getLlama({ logLevel: LlamaLogLevel.error });
       this.logger?.debug?.(`${TAG} Llama instance created`);
@@ -581,18 +592,55 @@ export function createEmbeddingService(
 ): EmbeddingService {
   // Remote OpenAI-compatible provider: any provider value other than "local"
   if (config && config.provider !== "local" && "apiKey" in config && config.apiKey) {
-    logger?.info(`${TAG} Using remote embedding (provider=${config.provider}, model=${config.model})`);
+    logger?.debug?.(`${TAG} Using remote embedding (provider=${config.provider}, model=${config.model})`);
     return new OpenAIEmbeddingService(config as OpenAIEmbeddingConfig, logger);
   }
 
   // Explicit local config
   if (config && config.provider === "local") {
     const localConfig = config as LocalEmbeddingConfig;
-    logger?.info(`${TAG} Using local embedding (node-llama-cpp, model=${localConfig.modelPath ?? DEFAULT_LOCAL_MODEL})`);
+    logger?.debug?.(`${TAG} Using local embedding (node-llama-cpp, model=${localConfig.modelPath ?? DEFAULT_LOCAL_MODEL})`);
     return new LocalEmbeddingService(localConfig, logger);
   }
 
   // Fallback: no config or empty apiKey → use local
-  logger?.info(`${TAG} No remote embedding configured, falling back to local embedding (node-llama-cpp)`);
+  logger?.debug?.(`${TAG} No remote embedding configured, falling back to local embedding (node-llama-cpp)`);
   return new LocalEmbeddingService(undefined, logger);
+}
+
+// ============================
+// NoopEmbeddingService (for server-side embedding backends)
+// ============================
+
+/**
+ * No-op embedding service for backends with built-in server-side embedding
+ * (e.g., TCVDB with Collection-level embedding config).
+ *
+ * All embed() calls return an empty Float32Array because the server generates
+ * vectors automatically from the text field during upsert/search.
+ */
+export class NoopEmbeddingService implements EmbeddingService {
+  embed(_text: string): Promise<Float32Array> {
+    return Promise.resolve(new Float32Array(0));
+  }
+
+  embedBatch(texts: string[]): Promise<Float32Array[]> {
+    return Promise.resolve(texts.map(() => new Float32Array(0)));
+  }
+
+  getDimensions(): number {
+    return 0;
+  }
+
+  getProviderInfo(): EmbeddingProviderInfo {
+    return { provider: "noop", model: "server-side" };
+  }
+
+  isReady(): boolean {
+    return true;
+  }
+
+  startWarmup(): void {
+    // no-op
+  }
 }

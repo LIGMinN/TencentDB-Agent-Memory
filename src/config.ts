@@ -127,6 +127,37 @@ export interface MemoryCleanupConfig {
   cleanTime: string;
 }
 
+/** BM25 sparse vector encoding configuration (local @tencentdb-agent-memory/tcvdb-text). */
+export interface BM25Config {
+  /** Whether BM25 sparse encoding is enabled (default: true) */
+  enabled: boolean;
+  /** Language for BM25 pre-trained params: "zh" or "en" (default: "zh") */
+  language: "zh" | "en";
+}
+
+/** Tencent Cloud VectorDB configuration. */
+export interface TcvdbConfig {
+  /** Instance URL (e.g. "http://10.0.1.1:80" or external domain) */
+  url: string;
+  /** Account name (default: "root") */
+  username: string;
+  /** API Key */
+  apiKey: string;
+  /** Database name (auto-generated from instance_id if empty) */
+  database: string;
+  /** User-friendly alias for this database (optional, for identification in database.json) */
+  alias: string;
+  /** Built-in embedding model (default: "bge-large-zh") */
+  embeddingModel: string;
+  /** Request timeout in ms (default: 10000) */
+  timeout: number;
+  /** Path to CA certificate PEM file (for HTTPS connections) */
+  caPemPath?: string;
+}
+
+/** Storage backend type. */
+export type StoreBackend = "sqlite" | "tcvdb";
+
 /** Report settings — controls metric/event reporting. */
 export interface ReportConfig {
   /** Enable reporting (default: true) */
@@ -143,6 +174,13 @@ export interface MemoryTdaiConfig {
   pipeline: PipelineTriggerConfig;
   recall: RecallConfig;
   embedding: EmbeddingConfig;
+  /** Storage backend: "sqlite" (default) or "tcvdb" */
+  storeBackend: StoreBackend;
+  /** Tencent Cloud VectorDB configuration (required when storeBackend = "tcvdb") */
+  tcvdb: TcvdbConfig;
+  /** BM25 sparse vector encoding (local @tencentdb-agent-memory/tcvdb-text) */
+  bm25: BM25Config;
+  /** Local JSONL cleanup settings */
   memoryCleanup: MemoryCleanupConfig;
   report: ReportConfig;
 }
@@ -272,6 +310,16 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
 
   const cleanTime = normalizeCleanTime(str(captureGroup, "cleanTime")) ?? "03:00";
 
+  // --- BM25 (local @tencentdb-agent-memory/tcvdb-text encoder) ---
+  const bm25Group = obj(c, "bm25");
+
+  // --- Store backend ---
+  const storeBackendRaw = str(c, "storeBackend") ?? "sqlite";
+  const storeBackend: StoreBackend = storeBackendRaw === "tcvdb" ? "tcvdb" : "sqlite";
+
+  // --- TCVDB config ---
+  const tcvdbGroup = obj(c, "tcvdb");
+
   const memoryCleanup: MemoryCleanupConfig = {
     retentionDays,
     enabled: retentionDays != null,
@@ -293,7 +341,7 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
     },
     persona: {
       triggerEveryN: num(personaGroup, "triggerEveryN") ?? 50,
-      maxScenes: num(personaGroup, "maxScenes") ?? 20,
+      maxScenes: num(personaGroup, "maxScenes") ?? 15,
       backupCount: num(personaGroup, "backupCount") ?? 3,
       sceneBackupCount: num(personaGroup, "sceneBackupCount") ?? 10,
       model: optStr(personaGroup, "model"),
@@ -327,6 +375,21 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
       timeoutMs: num(embeddingGroup, "timeoutMs") ?? 10_000,
       modelCacheDir: optStr(embeddingGroup, "modelCacheDir"),
       configError: embeddingConfigError,
+    },
+    storeBackend,
+    tcvdb: {
+      url: str(tcvdbGroup, "url") ?? "",
+      username: str(tcvdbGroup, "username") ?? "root",
+      apiKey: str(tcvdbGroup, "apiKey") ?? "",
+      database: str(tcvdbGroup, "database") ?? "",
+      alias: str(tcvdbGroup, "alias") ?? "",
+      embeddingModel: str(tcvdbGroup, "embeddingModel") ?? "bge-large-zh",
+      timeout: num(tcvdbGroup, "timeout") ?? 10000,
+      caPemPath: str(tcvdbGroup, "caPemPath") || undefined,
+    },
+    bm25: {
+      enabled: bool(bm25Group, "enabled") ?? true,
+      language: (str(bm25Group, "language") === "en" ? "en" : "zh") as "zh" | "en",
     },
     memoryCleanup,
     report: {
