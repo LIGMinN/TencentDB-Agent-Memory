@@ -28,7 +28,7 @@ Help your Agent remember fixed workflows, accumulate past experience, and reuse 
 
 **Plugged into OpenClaw**, it saves up to **63.59% tokens**, lifts pass rate by **+41.18%** (relative), and pushes PersonaMem accuracy from **48%** to **76%**.
 
-| Memory Capability | Benchmark | Clawpro Success | With Plugin | Relative Δ | Clawpro Tokens | With Plugin Tokens | Relative Δ |
+| Memory Capability | Benchmark | Openclaw Success | With Plugin | Relative Δ | Openclaw Tokens | With Plugin Tokens | Relative Δ |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Short-term** | WideSearch | 8.5% | **12%** | **+41.18%** | 174.31M | **63.46M** | **−63.59%** |
 | **Short-term** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1 | **2375.4** | **−33.09%** |
