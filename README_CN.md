@@ -160,6 +160,32 @@ openclaw gateway restart
 }
 ```
 
+### 5. Hermes Gateway 快速启动（Docker，需版本号 ≥ 0.3.0）
+
+除 OpenClaw 外，本插件也支持 [Hermes](https://github.com/hermes-ai/hermes) Agent。一行命令即可启动带记忆能力的 Hermes：
+
+```bash
+docker run -d \
+  --name hermes-memory \
+  --restart unless-stopped \
+  -p 8420:8420 \
+  -e MODEL_API_KEY="your-api-key" \
+  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \
+  -e MODEL_NAME="deepseek-v3.2" \
+  -e MODEL_PROVIDER="custom" \
+  -v hermes_data:/opt/data \
+  agentmemory/hermes-memory:latest
+```
+
+镜像支持 `linux/amd64` 和 `linux/arm64`。内置腾讯云 DeepSeek-V3.2 默认配置，如需自定义模型可额外传入 `MODEL_BASE_URL`、`MODEL_NAME`、`MODEL_PROVIDER`。
+
+验证：
+
+```bash
+curl http://localhost:8420/health          # 检查 Gateway 状态
+docker exec -it hermes-memory hermes       # 进入 Hermes 对话
+```
+
 ---
 
 ## 🔧 可调参数

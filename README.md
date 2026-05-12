@@ -159,6 +159,32 @@ Once enabled, TencentDB Agent Memory automatically handles conversation capture,
 }
 ```
 
+### 5. Hermes Gateway Quick Start (Docker, requires version ≥ 0.3.0)
+
+In addition to OpenClaw, this plugin also supports the [Hermes](https://github.com/hermes-ai/hermes) Agent. Start a memory-enabled Hermes with a single command:
+
+```bash
+docker run -d \
+  --name hermes-memory \
+  --restart unless-stopped \
+  -p 8420:8420 \
+  -e MODEL_API_KEY="your-api-key" \
+  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \
+  -e MODEL_NAME="deepseek-v3.2" \
+  -e MODEL_PROVIDER="custom" \
+  -v hermes_data:/opt/data \
+  agentmemory/hermes-memory:latest
+```
+
+The image supports `linux/amd64` and `linux/arm64`. It ships with Tencent Cloud DeepSeek-V3.2 defaults — to use a different model, pass `MODEL_BASE_URL`, `MODEL_NAME`, and `MODEL_PROVIDER` accordingly.
+
+Verify:
+
+```bash
+curl http://localhost:8420/health          # Check Gateway health
+docker exec -it hermes-memory hermes       # Enter Hermes conversation
+```
+
 ---
 
 ## 🔧 Configurable Parameters
