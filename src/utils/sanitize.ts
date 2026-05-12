@@ -18,6 +18,10 @@ export function sanitizeText(text: string): string {
   cleaned = cleaned.replace(/<relevant-scenes>[\s\S]*?<\/relevant-scenes>/g, "");
   cleaned = cleaned.replace(/<scene-navigation>[\s\S]*?<\/scene-navigation>/g, "");
 
+  // Remove offload-injected task context blocks (MMD mermaid diagrams)
+  cleaned = cleaned.replace(/<current_task_context>[\s\S]*?<\/current_task_context>/g, "");
+  cleaned = cleaned.replace(/<history_task_context[\s\S]*?<\/history_task_context>/g, "");
+
   // Remove framework-injected inbound metadata blocks (from inbound-meta.ts buildInboundUserContextPrefix).
   // These are "label:\n```json\n...\n```" blocks that the framework prepends to user messages.
   // Pattern matches all known block labels:

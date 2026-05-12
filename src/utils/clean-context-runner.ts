@@ -15,7 +15,8 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
-import { report } from "../report/reporter.js";
+import { getEnv } from "./env.js";
+import { report } from "../core/report/reporter.js";
 
 /**
  * Resolve a preferred temporary directory for memory-tdai operations.
@@ -116,7 +117,7 @@ function findPackageRoot(startDir: string, name: string): string | null {
 
 function resolveOpenClawRoot(): string {
   if (_rootCache) return _rootCache;
-  const override = process.env.OPENCLAW_ROOT?.trim();
+  const override = getEnv("OPENCLAW_ROOT")?.trim();
   if (override) { _rootCache = override; return override; }
 
   const candidates = new Set<string>();
@@ -396,15 +397,25 @@ export class CleanContextRunner {
           // Some providers (e.g. qwencode) reject tools:[] with minItems:1 validation.
           allow: this.options.enableTools ? ["read", "write", "edit"] : ["read"],
         },
+        // Override the full agent system prompt with the caller's extraction-specific
+        // system prompt. This replaces OpenClaw's default system prompt (identity,
+        // AGENTS.md, workspace context, tool guidance, etc.) to:
+        //   1. Save ~5000 tokens per LLM call
+        //   2. Avoid instruction interference with extraction prompts
+        agents: {
+          ...((this.options.config as Record<string, unknown>)?.agents as Record<string, unknown> | undefined),
+          defaults: {
+            ...(((this.options.config as Record<string, unknown>)?.agents as Record<string, unknown> | undefined)?.defaults as Record<string, unknown> | undefined),
+            systemPromptOverride:
+              params.systemPrompt ||
+              "You are a precise data extraction and generation assistant. Follow the user instructions exactly. Respond only with the requested output format.",
+          },
+        },
       };
 
-      // Build the effective prompt.
-      // Keep prepending the optional systemPrompt into the user-visible prompt so
-      // runtime and legacy fallback paths preserve the same behavior without
-      // relying on a newer native extraSystemPrompt contract.
-      const effectivePrompt = params.systemPrompt
-        ? `${params.systemPrompt}\n\n---\n\n${params.prompt}`
-        : params.prompt;
+      // systemPrompt is now in config.agents.defaults.systemPromptOverride
+      // (actual [system] role), so user prompt only contains the actual content.
+      const effectivePrompt = params.prompt;
 
       const ts = Date.now();
       const sessionId = `memory-${params.taskId}-session-${ts}`;

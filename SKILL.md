@@ -96,10 +96,10 @@ openclaw plugins update memory-tencentdb
     "pipeline": {
       "everyNConversations": 5,
       "enableWarmup": true,
-      "l1IdleTimeoutSeconds": 60,
+      "l1IdleTimeoutSeconds": 600,
       "l2DelayAfterL1Seconds": 90,
-      "l2MinIntervalSeconds": 300,
-      "l2MaxIntervalSeconds": 1800,
+      "l2MinIntervalSeconds": 900,
+      "l2MaxIntervalSeconds": 3600,
       "sessionActiveWindowHours": 24
     },
     "recall": {

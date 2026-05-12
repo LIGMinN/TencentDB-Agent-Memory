@@ -4,6 +4,146 @@
 
 ---
 
+## [0.3.3] - 2026-05-08
+
+### 🐛 修复
+
+- **加固 hook-policy 版本决策逻辑**：仅当宿主版本为严格 `x.y.z` 语义化版本、且 `>= 2026.4.24` 时才自动写入 `hooks.allowConversationAccess`；无法解析（如 `unknown`、beta、snapshot 等非标准版本）时一律跳过，避免对旧版本或非预期版本误写配置导致启动失败。
+- hook-policy 关键路径补充 debug 日志（原始版本串、解析后版本、最小要求版本、是否 patch 的决策），方便线上排查。
+
+### ✅ 测试
+
+- 新增 `src/utils/ensure-hook-policy.test.ts`，覆盖标准版本、预发布、`unknown`、边界值等决策 case。
+
+## [0.3.2] - 2026-05-08
+
+### 🐛 修复
+
+- 兼容 OpenClaw v2026.4.23 前的版本，防止写入的 hook 配置导致无法启动
+- 修改 allowConversationAccess 到 2026.4.24+ 添加。
+
+## [0.3.1-beta.1] - 2026-05-07
+
+### 🐛 修复
+
+- **兼容 OpenClaw v2026.4.23+ hook 权限策略**：该版本引入 `allowConversationAccess` 安全门控（[openclaw#70786](https://github.com/openclaw/openclaw/pull/70786)），导致非 bundled 插件的 `agent_end` hook 被静默拦截，整个 capture pipeline 失效。新增 `ensurePluginHookPolicy()` 自动检测并补全配置，优先通过 SDK 触发 gateway 自动重启，fallback 手动写入配置文件。
+- **兼容 OpenClaw 2026.5.3+ 安装校验**：新增 tsdown 构建配置生成 `dist/index.mjs`，满足新版安装时对编译产物的强制校验（不再允许纯 TypeScript 入口）。
+- **声明 `activation.onStartup`**：确保 gateway 在启动时加载本插件。
+- **声明 `contracts.tools`**：注册 `tdai_memory_search`、`tdai_conversation_search` 工具名，满足 tool registration contract 要求。
+
+---
+
+## [0.3.0] - 2026-05-06
+
+### 🚀 新功能
+
+**运维管理工具（CTL）**
+
+- 新增 `memory-tencentdb-ctl` 命令行管理工具，支持 standalone 与 hermes 两种运行模式
+- 新增 `install-memory-tencentdb` 一键安装脚本
+- CTL 新增 `config vdb-off` 命令，支持将 Gateway 存储从 VDB 回退到 SQLite
+- Gateway 安装脚本支持将环境变量写入 `~/.hermes/.env`（systemd 场景）
+
+**Offload 增强**
+
+- Offload 启动时自动应用 `after_tool_call` patch，patch 失败时自动禁用 offload
+- 新增 `setup-offload.sh` 一键启用/禁用 offload 脚本，支持 `--backend-api-key` 参数
+- L0 捕获过滤：排除 offload 注入的 MMD 上下文块，避免将压缩中间产物误存为记忆
+
+**Gateway 自愈与稳定性**
+
+- Hermes 插件新增 watchdog + lazy probe 机制，Gateway 异常时自动恢复
+- Gateway YAML 配置解析支持任意深度嵌套
+
+### ✨ 改进
+
+- 数据目录与安装目录统一整合至 `~/.memory-tencentdb/`
+- 引入 `$HERMES_HOME` 环境变量约定，移除硬编码 `~/.hermes` 路径
+- CTL hermes 配置编辑改为缩进感知，保持原始文件格式
+- 运维脚本保留在 tarball 中但不再注册为 bin 命令（减少全局命令污染）
+- init/destroy 生命周期日志降级为 debug 级别
+- patch 脚本兼容 pnpm 安装环境，使用 Node.js 动态解析 openclaw 安装路径
+
+### 🐛 修复
+
+**Core 稳定性**
+
+- 修复 `ensureSchedulerStarted` 并发调用下的竞态问题
+- 修复 `/session/end` 错误销毁全局 scheduler 的问题（改为按 session_key 作用域）
+- 修复关闭 store 时未等待后台 fire-and-forget 任务完成的问题
+- 修复 `disable_offload` 未正确删除 `slots.contextEngine` 配置的问题
+
+**Offload**
+
+- 修复 slot 占用检测逻辑：仅在 `ok=false`（slot 被占用）时拒绝，API 异常不再误判为冲突
+- 修复 `registerContextEngine` 抛异常时未禁用 offload 的问题
+- 修复 slot 被占用时未完全禁用所有 offload 功能的问题
+
+**L3 压缩**
+
+- 修复 aggressive/emergency 压缩在用户消息位于队首时卡死的问题
+- 修复消息被大量 offload 后压缩停滞的问题
+
+**迁移工具**
+
+- 修复源数据目录或 SQLite 不存在时迁移脚本崩溃的问题（改为优雅跳过）
+- 修复源数据为空时 config/manifest 未写入的问题
+
+**脚本与运维**
+
+- 修复 `set -e` 环境下 `((VAR++))` 在 VAR=0 时导致脚本退出的问题
+- 修复 patch 脚本误报 FAILED 计数的问题（跳过无 after_tool_call 上下文的候选项）
+- 修复 Hermes 退出时未终止 Gateway 子进程的问题
+
+### ♻️ 重构
+
+- 统一 patch 检测逻辑：始终委托给 patch 脚本并通过退出码判定结果
+
+---
+
+## [0.3.0-beta.1] - 2026-04-23
+
+### 🚀 新功能
+
+**短期记忆压缩（Context Offload）**
+
+- 新增 Offload 模块，支持长对话场景下的上下文压缩与记忆卸载
+
+**架构重构：Core + Gateway 多框架支持**
+
+- 重构为 `TdaiCore` 宿主无关的核心层 + 适配器模式，解耦 OpenClaw 框架依赖
+- 新增 `HostAdapter` / `LLMRunner` / `LLMRunnerFactory` 抽象接口，支持不同宿主的 LLM 调用
+- 新增 Hermes Gateway 适配器（`memory_tencentdb` Hermes Plugin），支持通过 Hermes 框架独立运行
+- `TdaiCore` 提供统一的 `handleBeforeRecall()` / `handleTurnCommitted()` / `searchMemories()` 等 API
+- Gateway 零配置自动发现：Hermes 插件自动检测配置和数据目录
+- 数据目录所有权从插件移至 Gateway 层管理
+
+**Recall 注入优化（Cache 友好）**
+
+- L1 召回记忆从 `appendSystemContext` 移到 `prependContext`（用户消息前缀），避免每轮系统提示词变化导致 prompt cache bust
+- Persona / Scene Navigation / Tools Guide 保持在 `appendSystemContext`（稳定内容，连续多轮 cache 命中）
+- 注册 `before_message_write` 钩子，在 user message 持久化到 JSONL 前 strip `<relevant-memories>` 标签，防止历史消息中累积旧的召回内容
+
+**分场景 Embedding 超时**
+
+- 新增 `embedding.recallTimeoutMs`（recall 路径）和 `embedding.captureTimeoutMs`（capture 路径）配置
+- recall 超时时 hybrid 策略自动降级为纯关键词搜索；capture 超时时 L1 dedup 降级为 FTS
+- 向前兼容：不配置时 fallback 到全局 `embedding.timeoutMs`
+
+### ✨ 改进
+
+- CleanContextRunner 通过 `systemPromptOverride` 替换 OpenClaw 默认系统提示词，每次 L1/L2/L3 调用节省 ~4500 input tokens
+- L2（场景提取）和 L3（画像生成）prompt 拆分为 `systemPrompt` + `userPrompt`，角色划分更清晰
+- Pipeline 默认参数调整：`l1IdleTimeoutSeconds` 60→600s，`l2MinIntervalSeconds` 300→900s，`l2MaxIntervalSeconds` 1800→3600s
+
+### 🐛 修复
+
+- 修复 `pullProfilesToLocal` 并发竞争导致 `ENOTEMPTY` 错误（乐观无锁修法：rename 竞争失败时静默使用对方结果）
+- 修复 `originalUserMessageCount` 数据链路断裂导致 L0 recorder 无法定位被污染的 user message
+- 修复 `RecallResult` 类型定义缺少 `prependContext` 字段（`types.ts` 与 `auto-recall.ts` 不一致）
+
+---
+
 ## [0.2.2] - 2026-04-17
 
 ### 🐛 修复

@@ -80,7 +80,7 @@ import type { PipelineSessionState } from "./checkpoint.js";
 import { SessionFilter } from "./session-filter.js";
 import { ManagedTimer } from "./managed-timer.js";
 import { SerialQueue } from "./serial-queue.js";
-import { report } from "../report/reporter.js";
+import { report } from "../core/report/reporter.js";
 
 // ============================
 // Types
@@ -131,10 +131,10 @@ export interface PipelineConfig {
      * Allows remote L1 to finish generating records asynchronously.
      */
     delayAfterL1Seconds: number;
-    /** Minimum interval between L2 extractions per session (seconds, default: 300) */
+    /** Minimum interval between L2 extractions per session (seconds, default: 900) */
     minIntervalSeconds: number;
     /**
-     * Maximum interval between L2 extractions per session (seconds, default: 1800).
+     * Maximum interval between L2 extractions per session (seconds, default: 3600).
      * Even without new L1 completions, L2 will poll at this interval for active sessions.
      */
     maxIntervalSeconds: number;
@@ -439,6 +439,68 @@ export class MemoryPipelineManager {
   // ============================
   // Graceful shutdown
   // ============================
+
+  /**
+   * Per-session flush — scoped end-of-session handling.
+   *
+   * Semantically different from {@link destroy}:
+   *   - ``destroy`` tears down the *whole* scheduler (meant for process
+   *     shutdown such as OpenClaw's ``gateway_stop``).
+   *   - ``flushSession`` only processes the one session identified by
+   *     ``sessionKey`` and leaves every other session's timers, buffers
+   *     and pipeline state untouched.  This is the correct semantic for
+   *     the Gateway's ``POST /session/end`` endpoint and for Hermes'
+   *     ``on_session_end`` callback, which fire when one conversation
+   *     ends while the process keeps serving other concurrent sessions.
+   *
+   * What it does:
+   *   1. Cancel the session's pending L1 idle timer (no further idle
+   *      fires for this key).
+   *   2. If the session's message buffer still holds work, enqueue an
+   *      immediate L1 run for this session (``triggerReason="flush"``).
+   *   3. Await the shared ``l1Queue`` so the caller observes L1
+   *      completion before returning.  We do not selectively wait
+   *      because L1 is already a single-consumer SerialQueue — waiting
+   *      for ``onIdle`` is the cheapest correct signal.
+   *
+   * What it deliberately does NOT do:
+   *   - Touch other sessions' timers / buffers / pipeline state.
+   *   - Destroy the scheduler or any of its queues.
+   *   - Reset global fields such as ``destroyed``.
+   *
+   * Unknown session keys are a no-op: the scheduler may legitimately
+   * have evicted the session earlier via GC, or the session may never
+   * have produced any captures.
+   */
+  async flushSession(sessionKey: string): Promise<void> {
+    if (this.destroyed) return;
+    if (this.sessionFilter.shouldSkip(sessionKey)) return;
+
+    const timers = this.sessionTimers.get(sessionKey);
+    const buffer = this.messageBuffers.get(sessionKey);
+
+    // Step 1: cancel the idle timer so it won't fire after we return.
+    if (timers?.l1Idle.pending) {
+      timers.l1Idle.cancel();
+    }
+
+    // Step 2: flush pending buffered messages through L1 if any.
+    if (buffer && buffer.length > 0) {
+      this.logger?.debug?.(
+        `${TAG} [${sessionKey}] flushSession: enqueuing L1 for ${buffer.length} buffered message(s)`,
+      );
+      this.enqueueL1(sessionKey, "flush");
+    }
+
+    // Step 3: wait for L1 to drain.  L1 is a single-consumer SerialQueue
+    // so this is the cheapest correct signal; it will not starve other
+    // sessions because any cross-session interleaving L1 work was either
+    // already queued or will be queued concurrently by their own capture
+    // paths.
+    await this.l1Queue.onIdle();
+
+    this.logger?.debug?.(`${TAG} [${sessionKey}] flushSession: complete`);
+  }
 
   /**
    * Maximum time (ms) to wait for pipeline flush during destroy.

@@ -62,13 +62,13 @@ export interface PipelineTriggerConfig {
   everyNConversations: number;
   /** Enable warm-up: start threshold at 1, double after each L1 (1→2→4→...→everyN) (default: true) */
   enableWarmup: boolean;
-  /** L1 idle timeout: trigger L1 after this many seconds of inactivity (default: 60) */
+  /** L1 idle timeout: trigger L1 after this many seconds of inactivity (default: 600) */
   l1IdleTimeoutSeconds: number;
   /** L2 delay after L1: wait this many seconds after L1 completes before triggering L2 (default: 90) */
   l2DelayAfterL1Seconds: number;
-  /** L2 min interval: minimum seconds between L2 runs per session (default: 300 = 5 min) */
+  /** L2 min interval: minimum seconds between L2 runs per session (default: 900 = 15 min) */
   l2MinIntervalSeconds: number;
-  /** L2 max interval: even without new conversations, trigger L2 at most this often per session (default: 1800 = 30 min) */
+  /** L2 max interval: even without new conversations, trigger L2 at most this often per session (default: 3600 = 60 min) */
   l2MaxIntervalSeconds: number;
   /** Sessions inactive longer than this (hours) stop L2 polling (default: 24) */
   sessionActiveWindowHours: number;
@@ -110,6 +110,10 @@ export interface EmbeddingConfig {
   maxInputChars: number;
   /** Timeout per embedding API call in milliseconds (default: 10000). */
   timeoutMs: number;
+  /** Override timeoutMs for recall-path embedding calls (user-facing, should be shorter). Falls back to timeoutMs. */
+  recallTimeoutMs?: number;
+  /** Override timeoutMs for capture-path embedding calls (background L1 dedup, can be longer). Falls back to timeoutMs. */
+  captureTimeoutMs?: number;
   /** Internal-only local model cache directory, not exposed in plugin schema. */
   modelCacheDir?: string;
   /** If set, contains an error message about invalid remote config (embedding is disabled) */
@@ -166,6 +170,83 @@ export interface ReportConfig {
   type: string;
 }
 
+/**
+ * Standalone LLM configuration — when set, TDAI uses direct API calls
+ * instead of the host's built-in LLM runner (e.g. OpenClaw's runEmbeddedPiAgent).
+ *
+ * This allows using a different (often cheaper/faster) model for memory
+ * extraction while the main agent uses a premium model.
+ *
+ * Leave undefined (default) to use the host's native LLM mechanism.
+ */
+export interface StandaloneLLMOverrideConfig {
+  /** Enable standalone LLM mode (default: false). When false, uses host LLM. */
+  enabled: boolean;
+  /** OpenAI-compatible API base URL (e.g. "https://api.openai.com/v1"). */
+  baseUrl: string;
+  /** API key for authentication. */
+  apiKey: string;
+  /** Model name (e.g. "gpt-4o", "deepseek-v3", "claude-sonnet-4-6"). */
+  model: string;
+  /** Max output tokens (default: 4096). */
+  maxTokens: number;
+  /** Request timeout in milliseconds (default: 120000). */
+  timeoutMs: number;
+}
+
+/** Context Offload settings — controls multi-layer context compression. */
+export interface OffloadConfig {
+  /** Enable context offload (default: false) */
+  enabled: boolean;
+  /** LLM model for offload tasks, format: "provider/model-id" */
+  model?: string;
+  /** LLM temperature (default: 0.2) */
+  temperature: number;
+  /** Force-trigger L1 when pending tool pairs >= this threshold (default: 4) */
+  forceTriggerThreshold: number;
+  /** Custom data directory (absolute path). Default: ~/.openclaw/context-offload */
+  dataDir?: string;
+  /** Default context window size (default: 200000) */
+  defaultContextWindow: number;
+  /** Max tool pairs per L1 batch (default: 20) */
+  maxPairsPerBatch: number;
+  /** Trigger L2 when node_id=null entries >= this count (default: 4) */
+  l2NullThreshold: number;
+  /** Trigger L2 if hasn't run for this many seconds (default: 300) */
+  l2TimeoutSeconds: number;
+  /** Mild compression ratio threshold (default: 0.5) */
+  mildOffloadRatio: number;
+  /** Aggressive compression ratio threshold (default: 0.85) */
+  aggressiveCompressRatio: number;
+  /** MMD injection token budget ratio (default: 0.2) */
+  mmdMaxTokenRatio: number;
+  /** Backend service URL. When set, L1/L1.5/L2/L4 LLM calls go through the backend. */
+  backendUrl?: string;
+  /** Backend API authentication token */
+  backendApiKey?: string;
+  /** Backend call timeout in milliseconds (default: 10000) */
+  backendTimeoutMs: number;
+  /**
+   * Offload data retention days. Sessions/refs/mmds older than this are cleaned up.
+   * 0 = disabled (default). Values in (0, 3) are treated as invalid and forced to 0.
+   * Minimum effective value: 3.
+   */
+  offloadRetentionDays: number;
+  /**
+   * Max total size in MB for offload debug log files (*.log in dataRoot).
+   * When exceeded, the largest logs are truncated to zero.
+   * 0 = disabled. Default: 50.
+   */
+  logMaxSizeMb: number;
+  /**
+   * User identifier sent as `X-User-Id` on backend requests. This is the
+   * primary key used by the backend `/offload/v1/store` endpoint to upsert
+   * per-user state. When omitted the plugin falls back to the machine's
+   * primary non-loopback IPv4 address.
+   */
+  userId?: string;
+}
+
 /** Fully resolved plugin configuration (v3). */
 export interface MemoryTdaiConfig {
   capture: CaptureConfig;
@@ -183,6 +264,15 @@ export interface MemoryTdaiConfig {
   /** Local JSONL cleanup settings */
   memoryCleanup: MemoryCleanupConfig;
   report: ReportConfig;
+  /**
+   * Standalone LLM override — when enabled, TDAI bypasses the host's LLM
+   * (e.g. OpenClaw's runEmbeddedPiAgent) and uses direct OpenAI-compatible
+   * API calls for L1/L2/L3 extraction.
+   *
+   * Default: disabled (uses host LLM).
+   */
+  llm: StandaloneLLMOverrideConfig;
+  offload: OffloadConfig;
 }
 
 // ============================
@@ -326,6 +416,30 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
     cleanTime,
   };
 
+  // --- Offload ---
+  const offloadGroup = obj(c, "offload");
+
+  const offload: OffloadConfig = {
+    enabled: bool(offloadGroup, "enabled") ?? false,
+    model: optStr(offloadGroup, "model"),
+    temperature: num(offloadGroup, "temperature") ?? 0.2,
+    forceTriggerThreshold: num(offloadGroup, "forceTriggerThreshold") ?? 4,
+    dataDir: optStr(offloadGroup, "dataDir"),
+    defaultContextWindow: num(offloadGroup, "defaultContextWindow") ?? 200000,
+    maxPairsPerBatch: num(offloadGroup, "maxPairsPerBatch") ?? 20,
+    l2NullThreshold: num(offloadGroup, "l2NullThreshold") ?? 4,
+    l2TimeoutSeconds: num(offloadGroup, "l2TimeoutSeconds") ?? 300,
+    mildOffloadRatio: num(offloadGroup, "mildOffloadRatio") ?? 0.5,
+    aggressiveCompressRatio: num(offloadGroup, "aggressiveCompressRatio") ?? 0.85,
+    mmdMaxTokenRatio: num(offloadGroup, "mmdMaxTokenRatio") ?? 0.2,
+    backendUrl: optStr(offloadGroup, "backendUrl"),
+    backendApiKey: optStr(offloadGroup, "backendApiKey"),
+    backendTimeoutMs: num(offloadGroup, "backendTimeoutMs") ?? 10000,
+    offloadRetentionDays: normalizeOffloadRetentionDays(num(offloadGroup, "offloadRetentionDays") ?? 0),
+    logMaxSizeMb: num(offloadGroup, "logMaxSizeMb") ?? 50,
+    userId: optStr(offloadGroup, "userId"),
+  };
+
   return {
     capture: {
       enabled: bool(captureGroup, "enabled") ?? true,
@@ -349,10 +463,10 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
     pipeline: {
       everyNConversations: num(pipelineGroup, "everyNConversations") ?? 5,
       enableWarmup: bool(pipelineGroup, "enableWarmup") ?? true,
-      l1IdleTimeoutSeconds: num(pipelineGroup, "l1IdleTimeoutSeconds") ?? 60,
+      l1IdleTimeoutSeconds: num(pipelineGroup, "l1IdleTimeoutSeconds") ?? 600,
       l2DelayAfterL1Seconds: num(pipelineGroup, "l2DelayAfterL1Seconds") ?? 90,
-      l2MinIntervalSeconds: num(pipelineGroup, "l2MinIntervalSeconds") ?? 300,
-      l2MaxIntervalSeconds: num(pipelineGroup, "l2MaxIntervalSeconds") ?? 1800,
+      l2MinIntervalSeconds: num(pipelineGroup, "l2MinIntervalSeconds") ?? 900,
+      l2MaxIntervalSeconds: num(pipelineGroup, "l2MaxIntervalSeconds") ?? 3600,
       sessionActiveWindowHours: num(pipelineGroup, "sessionActiveWindowHours") ?? 24,
     },
     recall: {
@@ -373,6 +487,8 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
       proxyUrl: embeddingProxyUrl,
       maxInputChars: num(embeddingGroup, "maxInputChars") ?? 5000,
       timeoutMs: num(embeddingGroup, "timeoutMs") ?? 10_000,
+      recallTimeoutMs: num(embeddingGroup, "recallTimeoutMs") ?? undefined,
+      captureTimeoutMs: num(embeddingGroup, "captureTimeoutMs") ?? undefined,
       modelCacheDir: optStr(embeddingGroup, "modelCacheDir"),
       configError: embeddingConfigError,
     },
@@ -396,6 +512,18 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
       enabled: bool(obj(c, "report"), "enabled") ?? false,
       type: str(obj(c, "report"), "type") ?? "local",
     },
+    llm: (() => {
+      const llmGroup = obj(c, "llm");
+      return {
+        enabled: bool(llmGroup, "enabled") ?? false,
+        baseUrl: str(llmGroup, "baseUrl") ?? "https://api.openai.com/v1",
+        apiKey: str(llmGroup, "apiKey") ?? "",
+        model: str(llmGroup, "model") ?? "gpt-4o",
+        maxTokens: num(llmGroup, "maxTokens") ?? 4096,
+        timeoutMs: num(llmGroup, "timeoutMs") ?? 120_000,
+      };
+    })(),
+    offload,
   };
 }
 
@@ -479,4 +607,17 @@ function normalizeCleanTime(input: string | undefined): string | undefined {
   if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return undefined;
 
   return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+}
+
+/**
+ * Normalize offload retention days.
+ *
+ * - `<= 0` → 0 (disabled)
+ * - `(0, 3)` → 0 (invalid, force disabled)
+ * - `>= 3` → as-is
+ */
+function normalizeOffloadRetentionDays(value: number): number {
+  if (value <= 0) return 0;
+  if (value < 3) return 0;
+  return value;
 }

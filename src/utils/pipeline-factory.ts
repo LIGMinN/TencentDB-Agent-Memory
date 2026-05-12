@@ -17,14 +17,14 @@ import type { MemoryTdaiConfig } from "../config.js";
 import { MemoryPipelineManager } from "./pipeline-manager.js";
 import type { L2Runner, L3Runner } from "./pipeline-manager.js";
 import { SessionFilter } from "./session-filter.js";
-import { extractL1Memories } from "../record/l1-extractor.js";
-import { readConversationMessagesGroupedBySessionId } from "../conversation/l0-recorder.js";
-import type { ConversationMessage } from "../conversation/l0-recorder.js";
+import { extractL1Memories } from "../core/record/l1-extractor.js";
+import { readConversationMessagesGroupedBySessionId } from "../core/conversation/l0-recorder.js";
+import type { ConversationMessage } from "../core/conversation/l0-recorder.js";
 import { CheckpointManager } from "./checkpoint.js";
 import type { PipelineSessionState } from "./checkpoint.js";
-import { createStoreBundle } from "../store/factory.js";
-import type { IMemoryStore } from "../store/types.js";
-import type { EmbeddingService } from "../store/embedding.js";
+import { createStoreBundle } from "../core/store/factory.js";
+import type { IMemoryStore } from "../core/store/types.js";
+import type { EmbeddingService } from "../core/store/embedding.js";
 import {
   readManifest,
   writeManifest,
@@ -32,10 +32,10 @@ import {
   diffStoreBinding,
   type Manifest,
 } from "./manifest.js";
-import { SceneExtractor } from "../scene/scene-extractor.js";
-import { PersonaTrigger } from "../persona/persona-trigger.js";
-import { PersonaGenerator } from "../persona/persona-generator.js";
-import { pullProfilesToLocal, syncLocalProfilesToStore } from "../profile/profile-sync.js";
+import { SceneExtractor } from "../core/scene/scene-extractor.js";
+import { PersonaTrigger } from "../core/persona/persona-trigger.js";
+import { PersonaGenerator } from "../core/persona/persona-generator.js";
+import { pullProfilesToLocal, syncLocalProfilesToStore } from "../core/profile/profile-sync.js";
 
 const TAG = "[memory-tdai] [pipeline-factory]";
 
@@ -69,6 +69,10 @@ export interface PipelineFactoryOptions {
   logger: PipelineLogger;
   /** Session filter (optional, defaults to empty). */
   sessionFilter?: SessionFilter;
+  /** Host-neutral LLM runner for L1 extraction (text-only, enableTools=false). */
+  l1LlmRunner?: import("../core/types.js").LLMRunner;
+  /** Host-neutral LLM runner for L2/L3 (tool-call enabled, enableTools=true). */
+  l2l3LlmRunner?: import("../core/types.js").LLMRunner;
 }
 
 // ============================
@@ -265,13 +269,15 @@ export function createL1Runner(opts: {
    * Metrics are skipped when the getter returns undefined.
    */
   getInstanceId?: () => string | undefined;
+  /** Host-neutral LLM runner for L1 extraction (standalone/gateway mode). */
+  llmRunner?: import("../core/types.js").LLMRunner;
 }): (params: { sessionKey: string }) => Promise<{ processedCount: number }> {
-  const { pluginDataDir, cfg, openclawConfig, vectorStore, embeddingService, logger, getInstanceId } = opts;
+  const { pluginDataDir, cfg, openclawConfig, vectorStore, embeddingService, logger, getInstanceId, llmRunner } = opts;
   const config = openclawConfig as Record<string, unknown> | undefined;
 
   return async ({ sessionKey }) => {
-    if (!config) {
-      logger.debug?.(`${TAG} [l1] No OpenClaw config, skipping L1 extraction`);
+    if (!config && !llmRunner) {
+      logger.debug?.(`${TAG} [l1] No OpenClaw config and no LLM runner, skipping L1 extraction`);
       return { processedCount: 0 };
     }
 
@@ -362,6 +368,8 @@ export function createL1Runner(opts: {
             vectorStore,
             embeddingService,
             conflictRecallTopK: cfg.embedding.conflictRecallTopK,
+            embeddingTimeoutMs: cfg.embedding.captureTimeoutMs ?? cfg.embedding.timeoutMs,
+            llmRunner,
           },
           logger,
           instanceId: getInstanceId?.(),
@@ -426,14 +434,21 @@ export function createL2Runner(opts: {
   vectorStore: IMemoryStore | undefined;
   logger: PipelineLogger;
   instanceId?: string;
+  /** Host-neutral LLM runner for L2 scene extraction (standalone/gateway mode). Must have enableTools=true. */
+  llmRunner?: import("../core/types.js").LLMRunner;
 }): L2Runner {
-  const { pluginDataDir, cfg, openclawConfig, vectorStore, logger, instanceId } = opts;
+  const { pluginDataDir, cfg, openclawConfig, vectorStore, logger, instanceId, llmRunner } = opts;
   let profileBaseline = new Map<string, { version: number; contentMd5: string; createdAtMs: number }>();
 
   return async (sessionKey: string, cursor?: string) => {
     logger.debug?.(
       `${TAG} [L2] session=${sessionKey}, updatedAfter=${cursor ?? "(full)"}`,
     );
+
+    if (!openclawConfig && !llmRunner) {
+      logger.warn(`${TAG} [L2] No OpenClaw config and no LLM runner, skipping scene extraction`);
+      return;
+    }
 
     let records: Array<{ content: string; created_at: string; id: string; updatedAt: string }>;
 
@@ -442,7 +457,7 @@ export function createL2Runner(opts: {
     }
 
     if (vectorStore && !vectorStore.isDegraded()) {
-      const { queryMemoryRecords } = await import("../record/l1-reader.js");
+      const { queryMemoryRecords } = await import("../core/record/l1-reader.js");
       const memRecords = await queryMemoryRecords(vectorStore, {
         sessionKey,
         updatedAfter: cursor,
@@ -467,7 +482,7 @@ export function createL2Runner(opts: {
       }));
     } else {
       logger.debug?.(`${TAG} [L2] VectorStore unavailable, falling back to JSONL read (session=${sessionKey})`);
-      const { readMemoryRecords } = await import("../record/l1-reader.js");
+      const { readMemoryRecords } = await import("../core/record/l1-reader.js");
       let sessionRecords = await readMemoryRecords(sessionKey, pluginDataDir, logger);
 
       if (cursor) {
@@ -502,6 +517,7 @@ export function createL2Runner(opts: {
       sceneBackupCount: cfg.persona.sceneBackupCount,
       logger,
       instanceId,
+      llmRunner,
     });
 
     const memories = records.map((r) => ({
@@ -575,8 +591,10 @@ export function createL3Runner(opts: {
   vectorStore?: IMemoryStore;
   logger: PipelineLogger;
   instanceId?: string;
+  /** Host-neutral LLM runner for L3 persona generation (standalone/gateway mode). Must have enableTools=true. */
+  llmRunner?: import("../core/types.js").LLMRunner;
 }): L3Runner {
-  const { pluginDataDir, cfg, openclawConfig, vectorStore, logger, instanceId } = opts;
+  const { pluginDataDir, cfg, openclawConfig, vectorStore, logger, instanceId, llmRunner } = opts;
 
   return async () => {
     const trigger = new PersonaTrigger({
@@ -591,8 +609,8 @@ export function createL3Runner(opts: {
       return;
     }
 
-    if (!openclawConfig) {
-      logger.warn(`${TAG} [L3] No OpenClaw config, skipping persona generation`);
+    if (!openclawConfig && !llmRunner) {
+      logger.warn(`${TAG} [L3] No OpenClaw config and no LLM runner, skipping persona generation`);
       return;
     }
 
@@ -612,6 +630,7 @@ export function createL3Runner(opts: {
       backupCount: cfg.persona.backupCount,
       logger,
       instanceId,
+      llmRunner,
     });
     const genResult = await generator.generateLocalPersona(reason);
     if (!genResult) {
@@ -672,7 +691,7 @@ export function createPipelineManager(
  * and `createL3Runner()` from this module.
  */
 export async function createPipeline(opts: PipelineFactoryOptions): Promise<PipelineInstance> {
-  const { pluginDataDir, cfg, openclawConfig, logger, sessionFilter } = opts;
+  const { pluginDataDir, cfg, openclawConfig, logger, sessionFilter, l1LlmRunner } = opts;
 
   // Ensure data directories exist
   initDataDirectories(pluginDataDir);
@@ -692,6 +711,7 @@ export async function createPipeline(opts: PipelineFactoryOptions): Promise<Pipe
     vectorStore,
     embeddingService,
     logger,
+    llmRunner: l1LlmRunner,
   }));
 
   // Wire persister
@@ -713,6 +733,7 @@ export async function createPipeline(opts: PipelineFactoryOptions): Promise<Pipe
         logger.warn(`${TAG} Error closing EmbeddingService: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+    resetStores(pluginDataDir);
     logger.info(`${TAG} Pipeline destroyed`);
   };
 
