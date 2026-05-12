@@ -104,7 +104,7 @@ openclaw gateway restart
 
 启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
 
-### 3. 使用 TCVDB 后端（可选）
+### 3. 使用 TCVDB 后端（可选，需版本号≥0.2.0）
 
 ```jsonc
 {
@@ -119,7 +119,8 @@ openclaw gateway restart
 }
 ```
 
-### 4. 启用短期记忆压缩（可选）
+### 4. 启用短期记忆压缩（可选，需版本号≥0.3.0）
+
 
 ```jsonc
 {
