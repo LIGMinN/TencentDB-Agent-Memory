@@ -107,6 +107,29 @@ graph LR
 ---
 
 ## 快速开始
+## 🎬 Demos
+
+<table align="center">
+  <tr align="center" valign="middle">
+    <td width="50%" valign="middle">
+      <video src="https://github.com/user-attachments/assets/667231cd-1c77-43e5-a662-6123a0073bc4" controls="controls" muted="muted" style="max-width: 100%;"></video>
+    </td>
+    <td width="50%" valign="middle">
+      <video src="https://github.com/user-attachments/assets/a7b24ba6-9f01-4821-86b5-b16d31b7f579" controls="controls" muted="muted" style="max-width: 100%;"></video>
+    </td>
+  </tr>
+  <tr align="center" valign="top">
+    <td>
+      <em>OpenClaw × Agent Memory</em>
+    </td>
+    <td>
+      <em>Hermes × Agent Memory</em>
+    </td>
+  </tr>
+</table>
+
+---
+
 ### 1. OpenClaw
 ### 1.1 安装插件
 
@@ -125,7 +148,7 @@ openclaw gateway restart
   "memory-tencentdb": {
     "enabled": true
   }
-}
+}wowo
 ```
 
 启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
@@ -194,26 +217,30 @@ MODEL_PROVIDER="custom"
 # -e MODEL_*                  将上方配置参数注入容器环境变量
 # -v hermes_data:/opt/data    记忆数据持久化到命名卷（容器重启后数据不丢）
 
+# 构建
+docker build -f Dockerfile.hermes -t hermes-memory .
+
+# 运行
 docker run -d \
   --name hermes-memory \
   --restart unless-stopped \
   -p 8420:8420 \
-  -e MODEL_API_KEY="$MODEL_API_KEY" \
-  -e MODEL_BASE_URL="$MODEL_BASE_URL" \
-  -e MODEL_NAME="$MODEL_NAME" \
-  -e MODEL_PROVIDER="$MODEL_PROVIDER" \
+  -e MODEL_API_KEY="your-api-key" \
+  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \
+  -e MODEL_NAME="deepseek-v3.2" \
+  -e MODEL_PROVIDER="custom" \
   -v hermes_data:/opt/data \
-  agentmemory/hermes-memory:latest
+  hermes-memory
+
+# 验证 Gateway
+curl http://localhost:8420/health
+
+# 进入 Hermes 对话
+docker exec -it hermes-memory hermes
 ```
 
-镜像支持 `linux/amd64` 和 `linux/arm64`。内置腾讯云 DeepSeek-V3.2 默认配置，如需自定义模型可额外传入 `MODEL_BASE_URL`、`MODEL_NAME`、`MODEL_PROVIDER`。
+> 镜像内置了腾讯云 DeepSeek-V3.2 的默认值，如果你使用该模型，`MODEL_BASE_URL`/`MODEL_NAME`/`MODEL_PROVIDER` 可以省略，只传 `MODEL_API_KEY` 即可。
 
-验证：
-
-```bash
-curl http://localhost:8420/health          # 检查 Gateway 状态
-docker exec -it hermes-memory hermes       # 进入 Hermes 对话
-```
 
 ---
 
