@@ -122,7 +122,7 @@ Commits without a valid `Signed-off-by` will not be merged.
 
 ## Security Issues
 
-If you discover a security vulnerability, please report it via [GitHub Issues](https://github.com/Tencent/TencentDB-Agent-Memory/issues) and we will address it promptly.
+If you discover a security vulnerability, please report it via the email agentmemory@tencent.com and we will address it promptly.
 
 ## License
 
