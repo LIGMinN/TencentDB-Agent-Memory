@@ -122,7 +122,7 @@ git commit -s -m "feat(store): add batch insert support"
 
 ## 安全问题
 
-如果你发现安全漏洞，请通过 [GitHub Issues](https://github.com/Tencent/TencentDB-Agent-Memory/issues) 报告，我们会尽快处理。
+如果你发现安全漏洞，请通过邮箱 agentmemory@tencent.com 报告，我们会尽快处理。
 
 ## 许可证
 
