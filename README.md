@@ -107,6 +107,30 @@ graph LR
 ---
 
 ## Quick Start
+## 🎬 Demos
+
+<table align="center">
+  <tr align="center" valign="middle">
+    <td width="50%" valign="middle">
+      <video src="https://github.com/user-attachments/assets/09c64a2c-9997-42c0-90a3-a15e250cfa43" controls="controls" muted="muted" style="max-width: 100%;"></video>
+    </td>
+    <td width="50%" valign="middle">
+      <video src="https://github.com/user-attachments/assets/7b499982-3572-474f-b179-3b42eb94a638" controls="controls" muted="muted" style="max-width: 100%;"></video>
+    </td>
+  </tr>
+  <tr align="center" valign="top">
+    <td>
+      <em>OpenClaw × Agent Memory</em>
+    </td>
+    <td>
+      <em>Hermes × Agent Memory</em>
+    </td>
+  </tr>
+</table>
+
+---
+
+
 ### 1. OpenClaw
 ### 1.1 Install the plugin
 
@@ -193,26 +217,29 @@ MODEL_PROVIDER="custom"
 # -e MODEL_*                  Inject the config parameters above as env vars
 # -v hermes_data:/opt/data    Persist memory data to a named volume (survives restart)
 
+# Build
+docker build -f Dockerfile.hermes -t hermes-memory .
+
+# Run
 docker run -d \
   --name hermes-memory \
   --restart unless-stopped \
   -p 8420:8420 \
-  -e MODEL_API_KEY="$MODEL_API_KEY" \
-  -e MODEL_BASE_URL="$MODEL_BASE_URL" \
-  -e MODEL_NAME="$MODEL_NAME" \
-  -e MODEL_PROVIDER="$MODEL_PROVIDER" \
+  -e MODEL_API_KEY="your-api-key" \
+  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \
+  -e MODEL_NAME="deepseek-v3.2" \
+  -e MODEL_PROVIDER="custom" \
   -v hermes_data:/opt/data \
-  agentmemory/hermes-memory:latest
+  hermes-memory
+
+# Verify the Gateway
+curl http://localhost:8420/health
+
+# Enter the Hermes interactive shell
+docker exec -it hermes-memory hermes
 ```
 
-The image supports both `linux/amd64` and `linux/arm64`. It ships with Tencent Cloud DeepSeek-V3.2 as the default configuration; to use a custom model, simply override `MODEL_BASE_URL`, `MODEL_NAME`, and `MODEL_PROVIDER`.
-
-Verify:
-
-```bash
-curl http://localhost:8420/health          # Check Gateway status
-docker exec -it hermes-memory hermes       # Enter Hermes chat REPL
-```
+> The image ships with Tencent Cloud DeepSeek-V3.2 as the default. If you use this model, omit `MODEL_BASE_URL` / `MODEL_NAME` / `MODEL_PROVIDER` and pass only `MODEL_API_KEY`.
 
 ---
 
