@@ -136,10 +136,11 @@ openclaw gateway restart
 ```jsonc
 {
   "memory-tencentdb": {
-    "offload": {
-      "enabled": true
-    }
-  }
+        "config": {
+          "offload": {
+            "enabled": true
+      }
+   }
 }
 ```
 
