@@ -135,11 +135,12 @@ Once enabled, TencentDB Agent Memory automatically handles conversation capture,
 ```jsonc
 {
   "memory-tencentdb": {
-        "config": {
-          "offload": {
-            "enabled": true
+    "config": {
+      "offload": {
+        "enabled": true
       }
-   }
+    }
+  }
 }
 ```
 
