@@ -222,11 +222,10 @@ async function _doInitStores(
           // Compare persisted store binding against current config
           const diffs = diffStoreBinding(existing.store, currentStoreInfo);
           if (diffs.length > 0) {
-            logger.warn(
-              `${TAG} ⚠️ Store config has changed since this data directory was created! ` +
-              `Diffs: ${diffs.join("; ")}. ` +
-              `Local JSONL data may not match the current store. ` +
-              `Consider re-seeding or migrating data.`,
+            logger.debug?.(
+              `${TAG} Store config differs from initial binding recorded in manifest ` +
+              `(${diffs.join("; ")}). ` +
+              `This is expected if the storage backend was switched intentionally.`,
             );
           }
         }

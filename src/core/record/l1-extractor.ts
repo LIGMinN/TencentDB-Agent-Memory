@@ -318,6 +318,11 @@ async function callLlmExtraction(params: {
     previousSceneName,
   });
 
+  // [l1-debug] ENTRY — what are we about to ask the LLM to extract?
+  logger?.debug?.(
+    `${TAG} [l1-debug] ENTRY taskId=l1-extraction, newMsgs=${newMessages.length}, bgMsgs=${backgroundMessages.length}, userPromptLen=${userPrompt.length}, sysPromptLen=${EXTRACT_MEMORIES_SYSTEM_PROMPT.length}, model=${model ?? "(default)"}, previousSceneName=${previousSceneName ? JSON.stringify(previousSceneName) : "(none)"}, runnerKind=${llmRunner ? "llmRunner" : "CleanContextRunner"}`,
+  );
+
   let result: string;
 
   if (llmRunner) {
@@ -364,6 +369,11 @@ function parseExtractionResult(raw: string, logger?: Logger): SceneSegment[] {
     const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
     if (!arrayMatch) {
       logger?.warn?.(`${TAG} No JSON array found in extraction response`);
+      // [l1-debug] NO_JSON — dump the full raw so we can see what the LLM actually said
+      const rawPreview = raw.slice(0, 2048);
+      logger?.warn?.(
+        `${TAG} [l1-debug] NO_JSON taskId=l1-extraction, rawLen=${raw.length}, cleanedLen=${cleaned.length}, rawFull=${JSON.stringify(rawPreview)}${raw.length > 2048 ? `…(+${raw.length - 2048})` : ""}`,
+      );
       return [];
     }
 

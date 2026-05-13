@@ -4,6 +4,38 @@
 
 ---
 
+## [0.3.4] - 2026-05-12
+
+### 🐛 修复
+
+- **兼容 OpenClaw v2026.4.7 以下版本 L1 抽取空输出**：旧宿主不支持 `systemPromptOverride`，通过 `extraSystemPrompt` 回退注入系统提示，确保 LLM 按数据提取助手身份工作。
+- **TCVDB hybrid 召回冗余双重 HTTP 调用**：`auto-recall` 对 TCVDB 发两次相同的 `hybridSearch` 请求（且 keyword 路径将 FTS5 OR 表达式错误传入 BM25 编码器）。新增 `nativeHybridSearch` 短路，TCVDB 单次调用即可完成 dense + sparse + RRF，recall 耗时减半（~50-120ms）。
+- **L2 parser 对齐 Go 后端**：增加 mermaid fallback，修复 `first{...last}` JSON 提取逻辑。
+
+### ✨ 改进
+
+- **VDB HTTP 请求级计时**：`tcvdb-client` 每次请求打一条 info 计时日志（`/document/hybridSearch 85ms`），retry/失败细节保持 debug 级别。
+- **启动路径误导性日志降级为 DEBUG**：store manifest 不一致、sqlite schema migration、profile-sync MD5 mismatch 等正常场景不再打 warn/info，避免 AI 误判。
+- **L1 提取调试日志**：新增 `[l1-debug]` 系列（RESOLVE / INVOKE / RESULT / EMPTY_DUMP / ENTRY / NO_JSON），方便定位 LLM 调用链问题。
+
+### 🔧 兼容性适配
+
+- **OC 2026.4.23 Zod schema 兼容 patch 脚本**（`scripts/bugfix-20260423/`）：一键修复 `allowConversationAccess` 被 `.strict()` 拒绝的问题，含轻量版脚本、全自动脚本、手动 SOP 文档。
+- Offload 日志去掉 `Backend` 前缀，默认超时为 120s。
+
+### 📦 新功能
+
+- **Offload Local Mode**：支持本地模式运行 offload（不依赖远端后端）。
+- **Docker 一体化镜像**（`Dockerfile.hermes`）：单容器捆绑 Hermes Agent + memory_tencentdb 插件 + TDAI Memory Gateway，统一 `MODEL_*` 环境变量驱动。
+
+### ✅ 测试
+
+- 修复 `fault-injection` FI-05 mock config 缺 `embedding` 字段
+- 修复 `cli.test` dependencies 断言适配新增依赖
+- 跳过 `patch-effectiveness` 已删除的 `install-plugin.sh` 测试
+
+---
+
 ## [0.3.3] - 2026-05-08
 
 ### 🐛 修复

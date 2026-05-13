@@ -89,8 +89,10 @@ async function resolveRunEmbeddedPiAgent(
     logger?.debug?.(
       `${TAG} resolveRunEmbeddedPiAgent: using injected runtime.agent.runEmbeddedPiAgent`,
     );
+    logger?.debug?.(`${TAG} [l1-debug] RESOLVE source=injected`);
     return injected;
   }
+  logger?.debug?.(`${TAG} [l1-debug] RESOLVE source=dist-fallback`);
   return loadRunEmbeddedPiAgent(logger);
 }
 
@@ -422,8 +424,27 @@ export class CleanContextRunner {
       const runId = `memory-${params.taskId}-run-${ts}`;
       this.logger?.debug?.(`${TAG} run() starting embedded agent: sessionId=${sessionId}, runId=${runId}, provider=${this.resolvedProvider ?? "(default)"}, model=${this.resolvedModel ?? "(default)"}`);
 
+      // [l1-debug] INVOKE — what are we about to send to the embedded agent?
+      const sysPromptOverrideLen =
+        ((cleanConfig.agents as Record<string, unknown> | undefined)?.defaults as Record<string, unknown> | undefined)?.systemPromptOverride
+          ? String(
+              ((cleanConfig.agents as Record<string, unknown>).defaults as Record<string, unknown>).systemPromptOverride,
+            ).length
+          : 0;
+      const toolsAllow =
+        ((cleanConfig.tools as Record<string, unknown> | undefined)?.allow as unknown[] | undefined) ?? [];
+      this.logger?.debug?.(
+        `${TAG} [l1-debug] INVOKE taskId=${params.taskId}, provider=${this.resolvedProvider ?? "(default)"}, model=${this.resolvedModel ?? "(default)"}, promptLen=${effectivePrompt.length}, sysPromptOverrideLen=${sysPromptOverrideLen}, toolsAllow=${JSON.stringify(toolsAllow)}, timeoutMs=${params.timeoutMs ?? 120_000}`,
+      );
+
       // Phase 2: Embedded agent run (LLM call + tool calls)
       const agentStartMs = Date.now();
+      // extraSystemPrompt: fallback for openclaw < 2026.4.7 which does not support
+      // config.agents.defaults.systemPromptOverride. On newer versions the
+      // override takes precedence and this becomes a no-op append.
+      const effectiveSystemPrompt =
+        params.systemPrompt ||
+        "You are a precise data extraction and generation assistant. Follow the user instructions exactly. Respond only with the requested output format.";
       const result = await runEmbeddedPiAgent({
         sessionId,
         sessionFile,
@@ -439,12 +460,35 @@ export class CleanContextRunner {
         // Instead rely on cleanConfig.tools.allow to restrict the tool set
         // to a minimal read-only tool (when enableTools=false).
         disableTools: false,
+        extraSystemPrompt: effectiveSystemPrompt,
         streamParams: {
           maxTokens: params.maxTokens,
         },
       });
       const agentElapsedMs = Date.now() - agentStartMs;
       this.logger?.debug?.(`${TAG} run() embedded agent completed: ${agentElapsedMs}ms`);
+
+      // [l1-debug] RESULT — what did the embedded agent return?
+      {
+        const payloadsRaw = (result as Record<string, unknown> | undefined)?.payloads;
+        const payloads = Array.isArray(payloadsRaw)
+          ? (payloadsRaw as Array<Record<string, unknown>>)
+          : [];
+        const payloadKinds = payloads.map((p) => {
+          if (typeof p?.type === "string") return p.type as string;
+          if (typeof p?.kind === "string") return p.kind as string;
+          return Object.keys(p ?? {}).slice(0, 3).join("|") || "unknown";
+        });
+        const errorPayloadCount = payloads.filter((p) => p?.isError === true).length;
+        const joinedText = payloads
+          .filter((p) => !p?.isError && typeof p?.text === "string")
+          .map((p) => String(p.text ?? ""))
+          .join("\n");
+        const textPreview = joinedText.replace(/\s+/g, " ").slice(0, 200);
+        this.logger?.debug?.(
+          `${TAG} [l1-debug] RESULT taskId=${params.taskId}, elapsedMs=${agentElapsedMs}, payloadCount=${payloads.length}, payloadKinds=${JSON.stringify(payloadKinds)}, errorPayloadCount=${errorPayloadCount}, textLen=${joinedText.length}, textPreview=${JSON.stringify(textPreview)}`,
+        );
+      }
 
       // Phase 3: Collect output
       const text = collectText((result as Record<string, unknown>).payloads as Array<{ text?: string; isError?: boolean }> | undefined);
@@ -455,6 +499,16 @@ export class CleanContextRunner {
         // extract (e.g. trivial greetings).  Log a warning instead of
         // throwing so the caller can handle it gracefully.
         this.logger?.warn?.(`${TAG} run() empty output after ${totalMs}ms (import=${importElapsedMs}ms, agent=${agentElapsedMs}ms) — treating as empty result`);
+        // [l1-debug] EMPTY_DUMP — dump the full result shape so we can see where text went
+        try {
+          const dump = JSON.stringify(result, (_k, v) => {
+            if (typeof v === "string" && v.length > 500) return v.slice(0, 500) + `…(+${v.length - 500})`;
+            return v;
+          }).slice(0, 2048);
+          this.logger?.warn?.(`${TAG} [l1-debug] EMPTY_DUMP taskId=${params.taskId}, resultJson=${dump}`);
+        } catch (dumpErr) {
+          this.logger?.warn?.(`${TAG} [l1-debug] EMPTY_DUMP taskId=${params.taskId}, dumpFailed=${dumpErr instanceof Error ? dumpErr.message : String(dumpErr)}`);
+        }
         // llm_call metric (empty output)
         if (params.instanceId && this.logger) {
           report("llm_call", {

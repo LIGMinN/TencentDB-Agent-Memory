@@ -5,7 +5,7 @@
  *
  * - **store**: written once on first successful store init; never overwritten.
  *   On subsequent starts the current config is compared against the persisted
- *   store binding — mismatches are logged as warnings.
+ *   store binding — mismatches are logged at debug level (informational only).
  * - **seed**: written once when a seed run completes; null for live-runtime dirs.
  *
  * This file is informational / read-only from the user's perspective.

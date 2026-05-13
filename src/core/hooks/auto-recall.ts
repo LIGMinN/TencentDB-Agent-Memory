@@ -356,7 +356,7 @@ async function searchMemories(
 
   // Resolve per-call embedding timeout for recall path.
   // Falls back to global embedding.timeoutMs when recallTimeoutMs is not configured.
-  const recallEmbeddingTimeoutMs = cfg.embedding.recallTimeoutMs ?? cfg.embedding.timeoutMs;
+  const recallEmbeddingTimeoutMs = cfg.embedding?.recallTimeoutMs ?? cfg.embedding?.timeoutMs;
   const embeddingCallOpts: EmbeddingCallOptions = { timeoutMs: recallEmbeddingTimeoutMs };
 
   try {
@@ -372,7 +372,19 @@ async function searchMemories(
       return { lines, timing: { ftsMs: 0, embeddingMs: performance.now() - tEmb, ftsHits: 0, embeddingHits: lines.length } };
     }
 
-    // Hybrid: run both keyword and embedding, merge with RRF
+    // Hybrid: if the store natively supports hybrid search (e.g. TCVDB does
+    // server-side dense + sparse + RRF in a single API call), short-circuit
+    // to avoid a redundant second HTTP request and a wasted local embed().
+    if (vectorStore?.getCapabilities().nativeHybridSearch) {
+      const tNative = performance.now();
+      const results = await vectorStore.searchL1Hybrid({ query: cleanText, topK: maxResults });
+      const nativeMs = performance.now() - tNative;
+      logger?.debug?.(`${TAG} [hybrid-native] Single-call hybrid: ${results.length} results in ${nativeMs.toFixed(0)}ms`);
+      const lines = results.map((r) => formatMemoryLine(vectorResultToFormatable(r)));
+      return { lines, timing: { ftsMs: 0, embeddingMs: nativeMs, ftsHits: 0, embeddingHits: results.length } };
+    }
+
+    // Fallback: run keyword + embedding in parallel, merge with client-side RRF (SQLite path)
     return await searchHybrid(cleanText, pluginDataDir, maxResults, threshold, vectorStore!, embeddingService!, logger, embeddingCallOpts);
   } catch (err) {
     logger?.warn?.(`${TAG} Memory search failed (strategy=${effectiveStrategy}): ${err instanceof Error ? err.message : String(err)}`);

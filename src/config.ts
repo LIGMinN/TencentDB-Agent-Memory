@@ -198,7 +198,14 @@ export interface StandaloneLLMOverrideConfig {
 export interface OffloadConfig {
   /** Enable context offload (default: false) */
   enabled: boolean;
-  /** LLM model for offload tasks, format: "provider/model-id" */
+  /**
+   * LLM execution mode for L1/L1.5/L2 tasks.
+   * - "local": call LLM directly via AI SDK (uses offload.model or main agent model)
+   * - "backend": route through remote backend service (requires backendUrl)
+   * Default: "local" (auto-detects based on backendUrl presence for backward compat)
+   */
+  mode: "local" | "backend";
+  /** LLM model for offload tasks, format: "provider/model-id". Falls back to agents.defaults.model when omitted. */
   model?: string;
   /** LLM temperature (default: 0.2) */
   temperature: number;
@@ -419,8 +426,15 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
   // --- Offload ---
   const offloadGroup = obj(c, "offload");
 
+  const offloadMode: "local" | "backend" = (() => {
+    const raw = optStr(offloadGroup, "mode");
+    if (raw === "local" || raw === "backend") return raw;
+    return optStr(offloadGroup, "backendUrl") ? "backend" : "local";
+  })();
+
   const offload: OffloadConfig = {
     enabled: bool(offloadGroup, "enabled") ?? false,
+    mode: offloadMode,
     model: optStr(offloadGroup, "model"),
     temperature: num(offloadGroup, "temperature") ?? 0.2,
     forceTriggerThreshold: num(offloadGroup, "forceTriggerThreshold") ?? 4,
@@ -434,7 +448,7 @@ export function parseConfig(raw: Record<string, unknown> | undefined): MemoryTda
     mmdMaxTokenRatio: num(offloadGroup, "mmdMaxTokenRatio") ?? 0.2,
     backendUrl: optStr(offloadGroup, "backendUrl"),
     backendApiKey: optStr(offloadGroup, "backendApiKey"),
-    backendTimeoutMs: num(offloadGroup, "backendTimeoutMs") ?? 10000,
+    backendTimeoutMs: num(offloadGroup, "backendTimeoutMs") ?? 120000,
     offloadRetentionDays: normalizeOffloadRetentionDays(num(offloadGroup, "offloadRetentionDays") ?? 0),
     logMaxSizeMb: num(offloadGroup, "logMaxSizeMb") ?? 50,
     userId: optStr(offloadGroup, "userId"),

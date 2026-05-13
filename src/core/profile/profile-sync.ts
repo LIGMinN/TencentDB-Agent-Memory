@@ -142,7 +142,7 @@ export async function pullProfilesToLocal(
         await fs.writeFile(target, record.content, "utf-8");
         if (md5(record.content) !== record.contentMd5) {
           await fs.rm(target, { force: true });
-          logger.warn(`[memory-tdai][profile-sync] MD5 mismatch for ${record.filename}`);
+          logger.debug?.(`[memory-tdai][profile-sync] MD5 mismatch for ${record.filename} (will re-pull on next sync)`);
         }
         continue;
       }
@@ -152,7 +152,7 @@ export async function pullProfilesToLocal(
         await fs.writeFile(path.join(tempDir, "persona.md"), body, "utf-8");
         if (md5(body) !== record.contentMd5) {
           await fs.rm(path.join(tempDir, "persona.md"), { force: true });
-          logger.warn(`[memory-tdai][profile-sync] MD5 mismatch for ${record.filename}`);
+          logger.debug?.(`[memory-tdai][profile-sync] MD5 mismatch for ${record.filename} (will re-pull on next sync)`);
         }
       }
     }

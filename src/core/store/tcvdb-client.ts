@@ -120,10 +120,12 @@ export class TcvdbClient {
    */
   async request<T = ApiResponse>(path: string, body: Record<string, unknown>): Promise<T> {
     let lastError: Error | undefined;
+    const t0 = performance.now();
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const tAttempt = performance.now();
       try {
-        this.logger?.debug?.(`${TAG} → ${path} body=${JSON.stringify(body).slice(0, 500)}`);
+        this.logger?.debug?.(`${TAG} → ${path} attempt=${attempt} body=${JSON.stringify(body).slice(0, 500)}`);
         const { statusCode, body: respBody } = await undiciRequest(`${this.baseUrl}${path}`, {
           method: "POST",
           headers: {
@@ -137,7 +139,8 @@ export class TcvdbClient {
 
         const text = await respBody.text();
         const json = JSON.parse(text) as ApiResponse;
-        this.logger?.debug?.(`${TAG} ← ${path} status=${statusCode} code=${json.code} msg=${json.msg} keys=[${Object.keys(json).join(",")}]`);
+        const attemptMs = Math.round(performance.now() - tAttempt);
+        this.logger?.debug?.(`${TAG} ← ${path} status=${statusCode} code=${json.code} attemptMs=${attemptMs} attempt=${attempt}`);
 
         if (json.code !== 0) {
           const err = new TcvdbApiError(path, json.code, json.msg);
@@ -146,18 +149,25 @@ export class TcvdbClient {
           continue;
         }
 
+        // Always log completion at info level (one line per request)
+        const totalMs = Math.round(performance.now() - t0);
+        this.logger?.info(`${TAG} ${path} ${totalMs}ms${attempt > 0 ? ` (${attempt + 1} attempts)` : ""}`);
+
         return json as unknown as T;
       } catch (err) {
+        const attemptMs = Math.round(performance.now() - tAttempt);
         if (err instanceof TcvdbApiError && err.apiCode !== 0) throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt < MAX_RETRIES) {
           const delay = 500 * (attempt + 1);
-          this.logger?.debug?.(`${TAG} ${path} retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`);
+          this.logger?.debug?.(`${TAG} ${path} retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms (lastAttemptMs=${attemptMs}, error=${lastError.message})`);
           await new Promise((r) => setTimeout(r, delay));
         }
       }
     }
 
+    const totalMs = Math.round(performance.now() - t0);
+    this.logger?.debug?.(`${TAG} ✗ ${path} totalMs=${totalMs} attempts=${MAX_RETRIES + 1} error=${lastError?.message}`);
     throw lastError ?? new Error(`${TAG} ${path} failed after retries`);
   }
 

@@ -494,7 +494,8 @@ export function compressByScoreCascade(
         for (const tuId of c.allToolUseIds) {
           replacedIds.add(tuId);
           replacedToolCallIdList.push(tuId);
-          const tuEntry = c.allOffloadEntries.find((e: OffloadEntry) => e.tool_call_id === tuId);
+          const tuIdNorm = normalizeToolCallIdForLookup(tuId);
+          const tuEntry = c.allOffloadEntries.find((e: OffloadEntry) => e.tool_call_id === tuId || e.tool_call_id === tuIdNorm || normalizeToolCallIdForLookup(e.tool_call_id) === tuIdNorm);
           replacedDetails.push({ toolCallId: tuId, score: c.score, summaryPreview: (tuEntry?.summary ?? "").slice(0, 120) });
         }
         for (let ei = 0; ei < c.allToolUseIds.length; ei++) {

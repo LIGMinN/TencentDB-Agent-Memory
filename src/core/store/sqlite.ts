@@ -665,7 +665,7 @@ export class VectorStore implements IMemoryStore {
     // Migration: add timestamp column if missing (existing DBs pre-v3.x)
     try {
       this.db.exec("ALTER TABLE l0_conversations ADD COLUMN timestamp INTEGER DEFAULT 0");
-      this.logger?.info(`${TAG} Migrated l0_conversations: added timestamp column`);
+      this.logger?.debug?.(`${TAG} Migrated l0_conversations: added timestamp column`);
     } catch {
       // Column already exists — expected on non-first run
     }

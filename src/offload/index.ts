@@ -50,6 +50,7 @@ import { findHistoryMmdInsertionPoint } from "./mmd-injector.js";
 import type { OffloadConfig } from "../config.js";
 import type { PluginConfig, PluginLogger } from "./types.js";
 import { BackendClient } from "./backend-client.js";
+import { LocalLlmClient } from "./local-llm/index.js";
 import type { L1Request, L15Request, L2Request } from "./backend-client.js";
 import { parseMmdMeta } from "./mmd-meta.js";
 import { sanitizeText, writeRefMd } from "./storage.js";
@@ -299,36 +300,91 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
   }
   const sessions = _sharedSessions;
 
-  // Resolve LLM Configuration — backend mode only
-  // Backend Client (required for L1/L1.5/L2/L4 — but context engine still registers for L3)
+  // Resolve LLM Configuration — mode-based selection
+  // - "backend": use remote backend service (requires backendUrl)
+  // - "local": call LLM directly via AI SDK (uses offload.model or main agent model)
   //
   // User identity: prefer offloadConfig.userId; fall back to the host's
-  // primary non-loopback IPv4 address. The backend `/offload/v1/store`
-  // endpoint upserts state keyed by this value (as Mongo `_id`).
+  // primary non-loopback IPv4 address.
   const _resolvedUserId = resolveUserId(offloadConfig.userId ?? null);
   logger.debug?.(
     `[context-offload] user-id resolved: "${_resolvedUserId}" (source=${getUserIdSource() ?? "?"})`,
   );
 
-  const backendClient = offloadConfig.backendUrl
-    ? new BackendClient(
+  let backendClient: BackendClient | LocalLlmClient | null = null;
+
+  if (offloadConfig.mode === "backend") {
+    // Remote backend mode
+    if (!offloadConfig.backendUrl) {
+      logger.error("[context-offload] mode=backend but backendUrl not configured. L1/L1.5/L2/L4 disabled.");
+    } else {
+      backendClient = new BackendClient(
         offloadConfig.backendUrl,
         logger,
         offloadConfig.backendApiKey,
         offloadConfig.backendTimeoutMs,
         () => _lastActiveSessionKey,
         () => _resolvedUserId,
-        () => _lastActiveSessionKey, // use sessionKey as task scope — coarse but stable
-      )
-    : null;
+        () => _lastActiveSessionKey,
+      );
+    }
+  } else {
+    // Local LLM mode — resolve model from offload.model or fall back to agents.defaults.model
+    let resolvedModelRef = offloadConfig.model;
+    if (!resolvedModelRef) {
+      // Fallback: use main agent model from openclaw.json agents.defaults.model
+      const mainConfig = api.config as Record<string, unknown> | undefined;
+      const agents = mainConfig?.agents as Record<string, unknown> | undefined;
+      const defaults = agents?.defaults as Record<string, unknown> | undefined;
+      const modelCfg = defaults?.model;
+      if (typeof modelCfg === "string" && modelCfg.includes("/")) {
+        resolvedModelRef = modelCfg;
+      } else if (modelCfg && typeof modelCfg === "object") {
+        const primary = (modelCfg as Record<string, unknown>).primary;
+        if (typeof primary === "string" && primary.includes("/")) {
+          resolvedModelRef = primary;
+        }
+      }
+      if (resolvedModelRef) {
+        logger.info(`[context-offload] offload.model not set, using main agent model: ${resolvedModelRef}`);
+      }
+    }
+
+    if (resolvedModelRef) {
+      const modelParts = resolvedModelRef.split("/", 2);
+      const providerKey = modelParts[0];
+      const modelId = modelParts[1] ?? resolvedModelRef;
+      const models = (api.config as any)?.models;
+      const providerCfg = models?.providers?.[providerKey];
+      const baseUrl = providerCfg?.baseUrl ?? providerCfg?.baseURL;
+      const apiKey = providerCfg?.apiKey;
+
+      if (baseUrl && apiKey) {
+        backendClient = new LocalLlmClient(
+          { baseUrl, apiKey, model: modelId, temperature: offloadConfig.temperature, timeoutMs: offloadConfig.backendTimeoutMs },
+          logger,
+        );
+      } else {
+        logger.error(
+          `[context-offload] Local LLM mode failed: provider "${providerKey}" not found or missing baseUrl/apiKey in models.providers. ` +
+          `L1/L1.5/L2 disabled.`,
+        );
+      }
+    } else {
+      logger.warn("[context-offload] No model resolved (offload.model not set, agents.defaults.model not found). L1/L1.5/L2 disabled.");
+    }
+  }
 
   // Track last active session key for BackendClient header
   let _lastActiveSessionKey: string | null = null;
 
-  if (backendClient) {
-    logger.debug?.(`[context-offload] Backend mode: ${offloadConfig.backendUrl}`);
+  if (backendClient && offloadConfig.mode === "backend") {
+    logger.debug?.(`[context-offload] LLM mode: backend (${offloadConfig.backendUrl})`);
+  } else if (backendClient) {
+    logger.debug?.(`[context-offload] LLM mode: local (${offloadConfig.model ?? "main-agent-model"})`);
+
   } else {
-    logger.warn("[context-offload] backendUrl not configured. L1/L1.5/L2/L4 disabled (L3 compression still active).");
+    logger.warn("[context-offload] LLM client not available. L1/L1.5/L2/L4 disabled (L3 compression still active).");
   }
 
   // ─── Fault tolerance constants ──────────────────────────────────────────────
@@ -361,7 +417,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
       const beforeFilter = takenPairs.length;
       const pairs = takenPairs.filter((p) => !isHeartbeat(p));
       if (beforeFilter > pairs.length) {
-        logger.info(`[context-offload] Backend L1: filtered ${beforeFilter - pairs.length} heartbeat pair(s)`);
+        logger.info(`[context-offload] L1: filtered ${beforeFilter - pairs.length} heartbeat pair(s)`);
       }
       if (pairs.length === 0) return;
 
@@ -376,7 +432,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
           const refPath = await writeRefMd(stateManager.ctx, p.timestamp, p.toolName, content);
           refByToolCallId.set(p.toolCallId, refPath);
         } catch (err) {
-          logger.error(`[context-offload] Backend L1.1 ref write error (${p.toolCallId}): ${err}`);
+          logger.error(`[context-offload] L1.1 ref write error (${p.toolCallId}): ${err}`);
         }
       }
 
@@ -385,7 +441,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
       for (let i = 0; i < pairs.length; i += L1_BATCH_SIZE) {
         batches.push(pairs.slice(i, i + L1_BATCH_SIZE));
       }
-      logger.info(`[context-offload] Backend L1 (${triggerSource}): ${pairs.length} pairs → ${batches.length} batch(es) of ≤${L1_BATCH_SIZE}`);
+      logger.info(`[context-offload] L1 (${triggerSource}): ${pairs.length} pairs → ${batches.length} batch(es) of ≤${L1_BATCH_SIZE}`);
 
       const recentMessages = _buildL1RecentContext(stateManager);
       logger.info(`[context-offload] L1 recentMessages (${recentMessages.length} chars):\n${recentMessages}`);
@@ -417,15 +473,15 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
             }
             await appendOffloadEntries(stateManager.ctx, resp.entries, undefined, logger);
             stateManager.entryCounter += resp.entries.length;
-            logger.info(`[context-offload] Backend L1 batch OK: ${resp.entries.length} entries from ${chunk.length} pairs (entryCounter=${stateManager.entryCounter})`);
+            logger.info(`[context-offload] L1 batch OK: ${resp.entries.length} entries from ${chunk.length} pairs (entryCounter=${stateManager.entryCounter})`);
           }
         } catch (err) {
           const newFails = prevFails + 1;
-          logger.warn(`[context-offload] Backend L1 batch FAILED (${chunkKey}, attempt ${newFails}/${MAX_L1_CHUNK_RETRIES}): ${err}`);
+          logger.warn(`[context-offload] L1 batch FAILED (${chunkKey}, attempt ${newFails}/${MAX_L1_CHUNK_RETRIES}): ${err}`);
 
           if (newFails >= MAX_L1_CHUNK_RETRIES) {
             // Exceeded retry limit — generate local fallback entries (no LLM summary)
-            logger.warn(`[context-offload] Backend L1 batch DEGRADED: ${chunk.length} pairs → fallback entries (no LLM summary)`);
+            logger.warn(`[context-offload] L1 batch DEGRADED: ${chunk.length} pairs → fallback entries (no LLM summary)`);
             stateManager._l1ChunkFailCounts.delete(chunkKey);
             const fallbackEntries: import("./types.js").OffloadEntry[] = [];
             for (const p of chunk) {
@@ -446,7 +502,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
             }
             await appendOffloadEntries(stateManager.ctx, fallbackEntries, undefined, logger);
             stateManager.entryCounter += fallbackEntries.length;
-            logger.info(`[context-offload] Backend L1 fallback: wrote ${fallbackEntries.length} degraded entries`);
+            logger.info(`[context-offload] L1 fallback: wrote ${fallbackEntries.length} degraded entries`);
           } else {
             // Under retry limit — re-enqueue this chunk for next flush
             stateManager._l1ChunkFailCounts.set(chunkKey, newFails);
@@ -454,7 +510,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
               stateManager.processedToolCallIds.delete(p.toolCallId);
               stateManager.pendingToolPairs.push(p as any);
             }
-            logger.info(`[context-offload] Backend L1 batch: re-enqueued ${chunk.length} pairs (retry ${newFails}/${MAX_L1_CHUNK_RETRIES})`);
+            logger.info(`[context-offload] L1 batch: re-enqueued ${chunk.length} pairs (retry ${newFails}/${MAX_L1_CHUNK_RETRIES})`);
           }
         }
       }
@@ -512,13 +568,13 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
       // Normalize backend response (handles null fields from fallback)
       const judgment = normalizeJudgment(resp as unknown as Record<string, unknown>);
       if (!judgment) {
-        logger.warn("[context-offload] Backend L1.5: all-null response (backend LLM unavailable)");
+        logger.warn("[context-offload] L1.5: all-null response (backend LLM unavailable)");
         return false; // trigger retry
       }
 
       // Success
       logger.info(
-        `[context-offload] Backend L1.5: completed=${judgment.taskCompleted}, continuation=${judgment.isContinuation}, longTask=${judgment.isLongTask}, label=${judgment.newTaskLabel ?? "none"}, contFile=${judgment.continuationMmdFile ?? "none"}`,
+        `[context-offload] L1.5: completed=${judgment.taskCompleted}, continuation=${judgment.isContinuation}, longTask=${judgment.isLongTask}, label=${judgment.newTaskLabel ?? "none"}, contFile=${judgment.continuationMmdFile ?? "none"}`,
       );
 
       // ── Flush residual null entries for the OLD mmd before task transition ──
@@ -578,10 +634,10 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
       await stateManager.save();
       stateManager.setMmdInjectionReady(true);
       stateManager.l15Settled = true;
-      logger.info("[context-offload] Backend L1.5: settled, MMD injection ready");
+      logger.info("[context-offload] L1.5: settled, MMD injection ready");
       return true;
     } catch (err) {
-      logger.warn(`[context-offload] Backend L1.5 attempt failed: ${err}`);
+      logger.warn(`[context-offload] L1.5 attempt failed: ${err}`);
       return false;
     }
   };
@@ -634,7 +690,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
         for (let i = 0; i < mmdEntries.length; i += L2_BATCH_SIZE) {
           batches.push(mmdEntries.slice(i, i + L2_BATCH_SIZE));
         }
-        logger.info(`[context-offload] Backend L2 (${triggerSource}): mmd=${mmdFile}, ${mmdEntries.length} entries → ${batches.length} batch(es) of ≤${L2_BATCH_SIZE}`);
+        logger.info(`[context-offload] L2 (${triggerSource}): mmd=${mmdFile}, ${mmdEntries.length} entries → ${batches.length} batch(es) of ≤${L2_BATCH_SIZE}`);
 
         for (let bIdx = 0; bIdx < batches.length; bIdx++) {
           const batch = batches[bIdx];
@@ -678,7 +734,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
 
             // Handle backend degraded response (empty fileAction = LLM unavailable)
             if (!resp.fileAction) {
-              logger.warn(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: degraded response, applying fallback backfill`);
+              logger.warn(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: degraded response, applying fallback backfill`);
               await backfillNodeIds(stateManager.ctx, resp.nodeMapping ?? {}, batchWaitIds, logger, {
                 mmdFallbackText: existingMmd ?? "",
                 mmdPrefix,
@@ -689,14 +745,14 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
             // Apply MMD file changes
             if (resp.fileAction === "replace" && resp.replaceBlocks && resp.replaceBlocks.length > 0) {
               const patchOk = await patchMmd(stateManager.ctx, mmdFile, resp.replaceBlocks);
-              logger.info(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: patchMmd: ${patchOk ? "ok" : "FAILED"} (${resp.replaceBlocks.length} blocks)`);
+              logger.info(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: patchMmd: ${patchOk ? "ok" : "FAILED"} (${resp.replaceBlocks.length} blocks)`);
               if (!patchOk && resp.mmdContent) {
                 await writeMmd(stateManager.ctx, mmdFile, resp.mmdContent);
-                logger.info(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: fallback writeMmd: ${resp.mmdContent.length} chars`);
+                logger.info(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: fallback writeMmd: ${resp.mmdContent.length} chars`);
               }
             } else if (resp.mmdContent) {
               await writeMmd(stateManager.ctx, mmdFile, resp.mmdContent);
-              logger.info(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: writeMmd: ${resp.mmdContent.length} chars`);
+              logger.info(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length}: writeMmd: ${resp.mmdContent.length} chars`);
             }
 
             // Backfill node_ids
@@ -712,15 +768,15 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
               mmdPrefix,
             });
 
-            logger.info(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length} (${triggerSource}): applied, action=${resp.fileAction}, mapping=${Object.keys(resp.nodeMapping ?? {}).length}`);
+            logger.info(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length} (${triggerSource}): applied, action=${resp.fileAction}, mapping=${Object.keys(resp.nodeMapping ?? {}).length}`);
           } catch (err) {
-            logger.error(`[context-offload] Backend L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length} failed: ${err}`);
+            logger.error(`[context-offload] L2 [${mmdFile}] batch ${bIdx + 1}/${batches.length} failed: ${err}`);
             // Continue with remaining batches — failed entries stay as "wait" for retry
           }
         }
       }
     } catch (err) {
-      logger.error(`[context-offload] Backend L2 failed: ${err}`);
+      logger.error(`[context-offload] L2 failed: ${err}`);
     }
   };
 
@@ -745,12 +801,13 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
             nodeIds.add(match[1]);
           }
           const filtered = allEntries.filter((e) => e.node_id && nodeIds.has(e.node_id));
-          const resp = await backendClient.l4Generate({
+          const resp = await (backendClient as any).l4Generate({
             mmdFilename,
             mmdContent,
             offloadEntries: filtered,
             skillFocus: skillCommand.skillFocus,
           });
+          if (!resp) return null;
           // Write skill file locally
           const { mkdir, writeFile } = await import("node:fs/promises");
           const { join } = await import("node:path");
@@ -960,7 +1017,7 @@ export function registerOffload(api: any, offloadConfig: OffloadConfig): void {
         logger.warn(`[context-offload] <<< after_tool_call SKIP: no session manager (${Date.now() - _atcStart}ms)`);
         return;
       }
-      const afterToolCallHandler = createAfterToolCallHandler(_mgr, logger, getContextWindow, pCfg, backendClient);
+      const afterToolCallHandler = createAfterToolCallHandler(_mgr, logger, getContextWindow, pCfg, backendClient as any);
       await afterToolCallHandler(event, ctx);
       const _handlerDone = Date.now();
       logger.info(`[context-offload] after_tool_call handler done: ${_handlerDone - _atcStart}ms`);
