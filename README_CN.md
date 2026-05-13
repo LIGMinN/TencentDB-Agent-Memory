@@ -33,7 +33,7 @@
 
 **作为 OpenClaw 插件接入后**：最高节省 **61.38% Token**，通过率相对提升 **51.52%**；PersonaMem 准确率从 **48%** 提升到 **76%**。
 
-| 记忆能力 | Benchmark | Openclaw 成功率 | 加插件后成功率 | 相对变化 | Openclaw Token 消耗 | 加插件后 Token 消耗 | 相对变化 |
+| 记忆能力 | Benchmark | OpenClaw 成功率 | 加插件后成功率 | 相对变化 | OpenClaw Token 消耗 | 加插件后 Token 消耗 | 相对变化 |
 | :------ | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **短期记忆** | WideSearch | 33% | **50%** | **+51.52%** | 221.31M | **85.64M** | **−61.38%** |
 | **短期记忆** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1M | **2375.4M** | **−33.09%** |
@@ -107,7 +107,7 @@ graph LR
 ---
 
 ## 快速开始
-### 1. Openclaw
+### 1. OpenClaw
 ### 1.1 安装插件
 
 ```bash
@@ -173,16 +173,35 @@ bash scripts/openclaw-after-tool-call-messages.patch.sh
 除 OpenClaw 外，本插件同样支持 [Hermes](https://github.com/NousResearch/hermes-agent) Agent。通过一条命令即可启动一个带记忆能力的 Hermes：
 
 ```bash
-docker run -d \                                                              # 以后台（detached）模式运行容器
-  --name hermes-memory \                                                     # 容器命名，方便后续 docker exec / logs / stop
-  --restart unless-stopped \                                                 # 崩溃或宿主机重启时自动拉起，除非手动停止
-  -p 8420:8420 \                                                             # 宿主机端口 8420 映射到容器端口 8420（Hermes Gateway）
-  -e MODEL_API_KEY="your-api-key" \                                          # 大模型 API Key（必填）—— 替换为你自己的凭证
-  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \               # 大模型接入地址，默认指向腾讯云大模型知识引擎
-  -e MODEL_NAME="deepseek-v3.2" \                                            # 模型名称，默认使用 DeepSeek-V3.2
-  -e MODEL_PROVIDER="custom" \                                               # 服务商类型："custom" 适用于所有 OpenAI 兼容接口
-  -v hermes_data:/opt/data \                                                 # 将记忆数据持久化到命名卷（容器重启后数据不丢）
-  agentmemory/hermes-memory:latest                                           # 官方镜像，支持 linux/amd64 与 linux/arm64
+# ============ 配置参数说明 ============
+# MODEL_API_KEY    大模型 API Key（必填）—— 替换为你自己的凭证
+# MODEL_BASE_URL   大模型接入地址，默认指向腾讯云大模型知识引擎（LKE）
+# MODEL_NAME       模型名称，默认使用 DeepSeek-V3.2
+# MODEL_PROVIDER   服务商类型："custom" 适用于所有 OpenAI 兼容接口
+
+MODEL_API_KEY="your-api-key"
+MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1"
+MODEL_NAME="deepseek-v3.2"
+MODEL_PROVIDER="custom"
+
+# ============ docker run 参数说明 ============
+# -d                          后台（detached）模式运行容器
+# --name hermes-memory        容器命名，方便后续 docker exec / logs / stop
+# --restart unless-stopped    崩溃或宿主机重启时自动拉起
+# -p 8420:8420                宿主机端口 ↔ 容器端口（Hermes Gateway）
+# -e MODEL_*                  将上方配置参数注入容器环境变量
+# -v hermes_data:/opt/data    记忆数据持久化到命名卷（容器重启后数据不丢）
+
+docker run -d \
+  --name hermes-memory \
+  --restart unless-stopped \
+  -p 8420:8420 \
+  -e MODEL_API_KEY="$MODEL_API_KEY" \
+  -e MODEL_BASE_URL="$MODEL_BASE_URL" \
+  -e MODEL_NAME="$MODEL_NAME" \
+  -e MODEL_PROVIDER="$MODEL_PROVIDER" \
+  -v hermes_data:/opt/data \
+  agentmemory/hermes-memory:latest
 ```
 
 镜像支持 `linux/amd64` 和 `linux/arm64`。内置腾讯云 DeepSeek-V3.2 默认配置，如需自定义模型可额外传入 `MODEL_BASE_URL`、`MODEL_NAME`、`MODEL_PROVIDER`。
@@ -237,7 +256,7 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 <details>
 <summary><b>🔴 Level 3 · 完整参数表</b>（运维 / 自定义模型 / 远程 embedding）</summary>
 
-完整字段、类型、约束见 [`openclaw.plugin.json`](./openclaw.plugin.json) 与 [`CONFIGURATION.md`](./CONFIGURATION.md)。
+完整字段、类型、约束见 [`openclaw.plugin.json`](./openclaw.plugin.json) 。
 
 - `embedding.*` — 远程 embedding 服务（OpenAI 兼容 API）
 - `llm.*` — 独立 LLM 模式（绕过 OpenClaw 内置模型，用指定 API 跑 L1/L2/L3）
@@ -303,7 +322,7 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 - 🐞 **发现 Bug 或有疑问？** 欢迎到 [GitHub Issues](https://github.com/Tencent/TencentDB-Agent-Memory/issues) 提交，我们会在 24 小时内响应。
 - 💡 **有想法想交流？** 欢迎在 [GitHub Discussions](https://github.com/Tencent/TencentDB-Agent-Memory/discussions) 发起讨论。
-- 🛠️ **想贡献代码？** 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+- 🛠️ **想贡献代码？** 请先阅读 [CONTRIBUTING.md](./CONTRIBUTING_CN.md)。
 - 💬 **想加入交流群？** 扫码加入 **Agent Memory 微信社群**，与早期开发者直接对话。
 <img width="200" height="146" alt="766450d8a7b30aa7e67121b4981f1810" src="https://github.com/user-attachments/assets/7cbbb57a-ec81-4f92-b0bd-7f3c5d760c1e" />
 
