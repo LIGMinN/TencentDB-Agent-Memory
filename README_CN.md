@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./assets/images/logo2.png" alt="TencentDB Agent Memory" width="880" />
+<img src="./assets/images/logo.png" alt="TencentDB Agent Memory" width="880" />
 
 ### 让 Agent 沉淀经验，让人专注创造。
 
@@ -9,13 +9,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E=22.16-brightgreen)](https://nodejs.org/)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-%3E=2026.3.13-orange)](https://github.com/openclaw/openclaw)
-![Hermes](https://img.shields.io/badge/Hermes-Gateway-7B61FF)
+[![Hermes](https://img.shields.io/badge/Hermes-Gateway-7B61FF)](https://hermes-agent.nousresearch.com/docs/)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/kDtHb5RW2)
 
-[效果亮点](#效果亮点) · [项目简介](#项目简介) · [特点](#特点) · [快速开始](#快速开始)
+[效果亮点](#-效果亮点) · [项目简介](#项目简介) · [核心技术](#核心技术拒绝平铺走向分层与符号化) · [方案特点](#-方案特点) · [快速开始](#快速开始)
+
+<div align="center">
+
+[English](./README.md) · [**简体中文**](./README_CN.md)
 
 </div>
 
 ---
+
+</div>
 
 ## ✨ 效果亮点
 
@@ -61,7 +68,7 @@ TencentDB Agent Memory 的设计理念围绕两个核心展开：**记忆分层*
 我们认为，**不管是长期的知识、短期的任务，还是未来的经验能力，记忆都不应该平铺，生成和召回都必须有层次**。TencentDB Agent Memory 将“分层”作为整个架构的统一设计哲学：
 
 *   **短期记忆（上下文卸载/任务）的分层**：底层保留原始、厚重的工具调用结果（`refs/*.md`），中层抽取步骤摘要（`jsonl`），高层则浓缩为一张极度轻量的 Mermaid 任务画布。Agent 在上下文中仅需关注高层结构，遇错时再沿着 `node_id` 下钻到底层查证。
-*   **长期个性化（用户理解）的分层**：打破扁平的历史记录，建立 L0 原始对话 → L1 结构化事实 → L2 场景块 → L3 用户画像 的语义金字塔。平时靠高层画像把握用户偏好，需要考证细节时再检索底层事实。
+*   **长期个性化（用户理解）的分层**：打破扁平的历史记录，建立 **L0 Conversation**（原始对话） → **L1 Atom**（结构化事实） → **L2 Scenario**（场景块） → **L3 Persona**（用户画像）的语义金字塔。平时靠高层 Persona 把握用户偏好，需要考证细节时再检索底层 Atom。
 *   **技能生成（Skill与动作沉淀，Roadmap）的分层**：记忆不应仅限于“知道什么”，还应包括“会做什么”。我们正在将分层延伸至动作域：从底层的执行轨迹（Traces）与报错日志中，中层归纳出共性的解决模式，高层最终提炼出可直接挂载复用的 Skill 或标准 SOP 代码。
 
 <p align="center">
@@ -70,20 +77,11 @@ TencentDB Agent Memory 的设计理念围绕两个核心展开：**记忆分层*
 
 **渐进式披露与异构存储**：为了支撑这种无处不在的分层，我们设计了底层数据库与上层文件系统结合的存储方案。底层（海量事实、日志、轨迹）存入数据库或归档文件，确保稳定与全量检索；高层（画像、场景、画布、Skill）存入业务可读的文件系统（Markdown），确保高信息密度、逻辑清晰与白盒可调。**低层保留证据，高层保留结构。**
 
-**每一条信息都 100% 可找回、可恢复**：压缩或抽象最大的风险是“丢失证据”。得益于严格的索引映射机制，系统内没有任何一段摘要是“不可逆”的黑盒。无论是短期记忆中被卸载的一段报错日志，还是长期记忆里总结出的一条用户偏好，Agent 或开发者都可以沿着“高层符号（画像/画布） → 中层索引（场景/JSONL） → 底层原文（L0对话/refs）”的链路进行完美溯源与恢复。
+**每一条信息都 100% 可找回、可恢复**：压缩或抽象最大的风险是“丢失证据”。得益于严格的索引映射机制，系统内没有任何一段摘要是“不可逆”的黑盒。无论是短期记忆中被卸载的一段报错日志，还是长期记忆里总结出的一条用户偏好，Agent 或开发者都可以沿着“高层符号（Persona / 画布） → 中层索引（Scenario / JSONL） → 底层原文（L0 Conversation / refs）”的链路进行完美溯源与恢复。
 
-```mermaid
-flowchart LR
-  subgraph TraceLink["100% 可找回、可恢复的下钻链路"]
-    direction TB
-    High["高层：符号与结构<br/>(Persona 画像 / Mermaid 画布)"] 
-    Mid["中层：摘要与索引<br/>(Scene 场景块 / JSONL 摘要)"]
-    Low["底层：完整事实与证据<br/>(L0 原始对话 / refs 原文)"]
-    
-    High == "需要细节 / 发生疑惑" ==> Mid
-    Mid == "凭借 node_id 或引文匹配" ==> Low
-  end
-```
+<div align="center">
+  <img src="assets/images/flowchart1.cn.png" alt="Retrievable and Recoverable Drill-Down Chain" />
+</div>
 
 ### 2. 符号化记忆：用最少符号表达最多语义（Mermaid 画布）
 
@@ -106,19 +104,18 @@ graph LR
     style MMD fill:#eff6ff,stroke:#3b82f6,stroke-width:2px
     style Agent fill:#fffbeb,stroke:#f59e0b,stroke-width:2px
 ```
-
 ---
 
 ## 快速开始
-
-### 1. 安装插件
+### 1. Openclaw
+### 1.1 安装插件
 
 ```bash
 openclaw plugins install @tencentdb-agent-memory/memory-tencentdb
 openclaw gateway restart
 ```
 
-### 2. 零配置启用
+### 1.2 零配置启用
 
 默认使用本地 `SQLite + sqlite-vec` 后端。
 
@@ -133,22 +130,8 @@ openclaw gateway restart
 
 启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
 
-### 3. 使用 TCVDB 后端（可选，需版本号 ≥ 0.2.0）
 
-```jsonc
-{
-  "memory-tencentdb": {
-    "storeBackend": "tcvdb",
-    "tcvdb": {
-      "url": "http://your-vdb-instance:8100",
-      "apiKey": "your-api-key",
-      "database": "my_memory_db"
-    }
-  }
-}
-```
-
-### 4. 启用短期记忆压缩（可选，需版本号 ≥ 0.3.0）
+### 1.3 启用短期记忆压缩（可选，要求版本 ≥ 0.3.4）
 
 ```jsonc
 {
@@ -160,21 +143,46 @@ openclaw gateway restart
 }
 ```
 
-### 5. Hermes Gateway 快速启动（Docker，需版本号 ≥ 0.3.0）
+#### 步骤 1 —— 在插件配置中注册 slot
 
-除 OpenClaw 外，本插件也支持 [Hermes](https://github.com/hermes-ai/hermes) Agent。一行命令即可启动带记忆能力的 Hermes：
+在 `slots` 字段中声明 `contextEngine`，让 OpenClaw 把上下文卸载请求路由到本插件：
+
+```jsonc
+{
+  "plugins": {
+    "slots": {
+      "contextEngine": "openclaw-context-offload"
+    }
+  }
+}
+```
+
+#### 步骤 2 —— 执行 patch 脚本
+
+为保证最佳效果，请执行以下 patch 脚本。该脚本会注入 `after-tool-call` 消息钩子，让工具调用结果能被正确卸载与回溯：
 
 ```bash
-docker run -d \
-  --name hermes-memory \
-  --restart unless-stopped \
-  -p 8420:8420 \
-  -e MODEL_API_KEY="your-api-key" \
-  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \
-  -e MODEL_NAME="deepseek-v3.2" \
-  -e MODEL_PROVIDER="custom" \
-  -v hermes_data:/opt/data \
-  agentmemory/hermes-memory:latest
+bash scripts/openclaw-after-tool-call-messages.patch.sh
+```
+
+> 💡 patch 每次 OpenClaw 安装只需执行一次。升级 OpenClaw 后建议重新执行以确保钩子生效。
+
+
+### 2. Hermes（Docker，需版本号 ≥ 0.3.4）
+
+除 OpenClaw 外，本插件同样支持 [Hermes](https://github.com/NousResearch/hermes-agent) Agent。通过一条命令即可启动一个带记忆能力的 Hermes：
+
+```bash
+docker run -d \                                                              # 以后台（detached）模式运行容器
+  --name hermes-memory \                                                     # 容器命名，方便后续 docker exec / logs / stop
+  --restart unless-stopped \                                                 # 崩溃或宿主机重启时自动拉起，除非手动停止
+  -p 8420:8420 \                                                             # 宿主机端口 8420 映射到容器端口 8420（Hermes Gateway）
+  -e MODEL_API_KEY="your-api-key" \                                          # 大模型 API Key（必填）—— 替换为你自己的凭证
+  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \               # 大模型接入地址，默认指向腾讯云大模型知识引擎
+  -e MODEL_NAME="deepseek-v3.2" \                                            # 模型名称，默认使用 DeepSeek-V3.2
+  -e MODEL_PROVIDER="custom" \                                               # 服务商类型："custom" 适用于所有 OpenAI 兼容接口
+  -v hermes_data:/opt/data \                                                 # 将记忆数据持久化到命名卷（容器重启后数据不丢）
+  agentmemory/hermes-memory:latest                                           # 官方镜像，支持 linux/amd64 与 linux/arm64
 ```
 
 镜像支持 `linux/amd64` 和 `linux/arm64`。内置腾讯云 DeepSeek-V3.2 默认配置，如需自定义模型可额外传入 `MODEL_BASE_URL`、`MODEL_NAME`、`MODEL_PROVIDER`。
@@ -197,7 +205,7 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 | 字段 | 默认 | 说明 |
 | :--- | :--- | :--- |
-| `storeBackend` | `"sqlite"` | 存储后端：`sqlite` / `tcvdb` |
+| `storeBackend` | `"sqlite"` | 存储后端：`sqlite` |
 | `recall.strategy` | `"hybrid"` | 召回策略：`keyword` / `embedding` / `hybrid`（RRF 融合，推荐） |
 | `recall.maxResults` | `5` | 每次召回条数 |
 | `pipeline.everyNConversations` | `5` | 每 N 轮对话触发一次 L1 记忆提取 |
@@ -232,7 +240,6 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 完整字段、类型、约束见 [`openclaw.plugin.json`](./openclaw.plugin.json) 与 [`CONFIGURATION.md`](./CONFIGURATION.md)。
 
 - `embedding.*` — 远程 embedding 服务（OpenAI 兼容 API）
-- `tcvdb.*` — 腾讯云向量数据库完整参数（含 HTTPS / 自签 CA）
 - `llm.*` — 独立 LLM 模式（绕过 OpenClaw 内置模型，用指定 API 跑 L1/L2/L3）
 - `offload.backendUrl / backendApiKey` — 将 L1/L1.5/L2/L4 offload 流程卸载到后端服务
 - `report.*` — 指标上报
@@ -249,8 +256,8 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 | 问题类型 | 优先使用 | 继续下钻 |
 | :--- | :--- | :--- |
-| 日常偏好、表达风格、长期目标 | L3 Persona / L2 Scene | 需要事实时查 L1 / L0 |
-| 具体事实、时间、项目细节 | L1 Memory / L0 Conversation | 命中不足时扩大时间范围或语义检索 |
+| 日常偏好、表达风格、长期目标 | L3 Persona / L2 Scenario | 需要事实时查 L1 Atom / L0 Conversation |
+| 具体事实、时间、项目细节 | L1 Atom / L0 Conversation | 命中不足时扩大时间范围或语义检索 |
 | 当前长任务继续执行 | Active MMD 任务画布 | 摘要不够时查 JSONL，再读 `refs/*.md` 原文 |
 | 历史任务恢复 | Metadata 任务入口 | 打开 MMD → 找 node_id → 追 result_ref |
 
@@ -260,12 +267,14 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 很多记忆系统的问题是：召回错了，你只能看到一串向量分数，很难判断到底哪里错。TencentDB Agent Memory 把关键中间产物保存在可读文件里：
 
-- L2 场景块是 Markdown，可以直接打开检查。
-- L3 用户画像是 `persona.md`，可以追溯到对应场景。
+- L2 Scenario 块是 Markdown，可以直接打开检查。
+- L3 Persona 存放在 `persona.md`，可以追溯到对应的 Scenario。
 - 短期任务画布是 Mermaid，既能给人看，也能给 Agent 读。
 - 原文、摘要、节点之间有 `result_ref` 和 `node_id` 关联。
 
-这意味着调试不再是翻黑盒数据库，而是沿着“画像 → 场景 → 记忆 → 原文”的链路逐层定位。
+这意味着调试不再是翻黑盒数据库，而是沿着“Persona → Scenario → Atom → Conversation”的链路逐层定位。
+
+**这些分层记忆产物都存放在 `~/.openclaw/memory-tdai/` 下，可以直接打开目录逐层查看。**
 
 ### 3. 工程能力完整：不是 Demo，而是可接入的插件
 
@@ -273,10 +282,9 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 | :--- | :--- |
 | OpenClaw 插件 | 安装后即可自动捕获、提取、召回记忆 |
 | Hermes Gateway 适配 | `TdaiCore + HostAdapter` 解耦宿主框架 |
-| 双后端 | 本地 `SQLite + sqlite-vec`，或远端 `TCVDB` |
+| 本地后端 | `SQLite + sqlite-vec`，开箱即用 |
 | 混合检索 | BM25 + 向量 + RRF，兼顾关键词和语义召回 |
 | Agent 工具 | `tdai_memory_search` / `tdai_conversation_search` |
-| 数据迁移 | 支持历史导入、SQLite → TCVDB 迁移、VDB 导出 |
 
 ---
 
@@ -284,7 +292,6 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 | 文档 | 内容 |
 | :--- | :--- |
-| [`CONFIGURATION.md`](./CONFIGURATION.md) | 完整配置参考、字段说明与高级参数 |
 | [`scripts/README.memory-tencentdb-ctl.md`](./scripts/README.memory-tencentdb-ctl.md) | 运维管理工具说明 |
 | [`CHANGELOG.md`](./CHANGELOG.md) | 版本变更记录 |
 | [`openclaw.plugin.json`](./openclaw.plugin.json) | OpenClaw 插件声明与配置 Schema |
@@ -306,11 +313,10 @@ docker exec -it hermes-memory hermes       # 进入 Hermes 对话
 
 - [x] 长期个性化记忆（L0 → L3）
 - [x] 短期记忆压缩（Context Offload + Mermaid 画布）
-- [x] 本地 SQLite 后端与腾讯云向量数据库 TCVDB 后端
+- [x] 可用本地 SQLite 后端与腾讯云向量数据库 TCVDB 后端
 - [x] OpenClaw 插件与 Hermes Gateway 适配
-- [ ] 短期记忆压缩正式产品化上线
 - [ ] 记忆可迁移：跨 Agent / 跨框架 / 跨设备的导入导出与热迁移
-- [ ] 更多 Agent 框架适配
+- [ ] Skill自动生成
 - [ ] 可视化调试与记忆观测面板
 
 ---

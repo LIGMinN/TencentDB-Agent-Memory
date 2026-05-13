@@ -1,4 +1,4 @@
-# memory-tencentdb-ctl.sh — memory_tencentdb (TDAI) 运维脚本
+# memory-tencentdb-ctl.sh — memory_tencentdb运维脚本
 
 > 配合 [`install_hermes_memory_tencentdb.sh`](./install_hermes_memory_tencentdb.sh) 使用。
 > 先跑安装脚本部署好插件 + Node 依赖，之后日常的启停 / 配置全部通过 `memory-tencentdb-ctl.sh` 完成。
