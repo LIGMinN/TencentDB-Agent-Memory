@@ -33,7 +33,7 @@
 
 When integrated with OpenClaw, it cuts token usage by up to **61.38%**, improves pass rate by **51.52%** (relative), and raises PersonaMem accuracy from **48%** to **76%**.
 
-| Memory Capability | Benchmark | Openclaw Success | With Plugin | Relative Δ | Openclaw Tokens | With Plugin Tokens | Relative Δ |
+| Memory Capability | Benchmark | OpenClaw Success | With Plugin | Relative Δ | OpenClaw Tokens | With Plugin Tokens | Relative Δ |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Short-term** | WideSearch | 33% | **50%** | **+51.52%** | 221.31M | **85.64M** | **−61.38%** |
 | **Short-term** | SWE-bench | 58.4% | **64.2%** | **+9.93%** | 3474.1M | **2375.4M** | **−33.09%** |
@@ -107,7 +107,7 @@ graph LR
 ---
 
 ## Quick Start
-### 1. Openclaw
+### 1. OpenClaw
 ### 1.1 Install the plugin
 
 ```bash
@@ -169,31 +169,51 @@ bash scripts/openclaw-after-tool-call-messages.patch.sh
 
 ### 2. Hermes (Docker, requires version ≥ 0.3.4)
 
-In addition to OpenClaw, this plugin also supports the [Hermes](https://github.com/NousResearch/hermes-agent) Agent. Start a memory-enabled Hermes with a single command:
+In addition to OpenClaw, this plugin also supports [Hermes](https://github.com/NousResearch/hermes-agent) Agent. You can launch a memory-enabled Hermes with a single command:
 
 ```bash
-docker run -d \                                                              # Run container in detached (background) mode
-  --name hermes-memory \                                                     # Container name for easy docker exec / logs / stop
-  --restart unless-stopped \                                                 # Auto-restart on crash or host reboot, unless manually stopped
-  -p 8420:8420 \                                                             # Map host port 8420 -> container port 8420 (Hermes Gateway)
-  -e MODEL_API_KEY="your-api-key" \                                          # LLM API key (required) — replace with your own credential
-  -e MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1" \               # LLM endpoint, defaults to Tencent Cloud LKE Auto Platform
-  -e MODEL_NAME="deepseek-v3.2" \                                            # Model identifier, defaults to DeepSeek-V3.2
-  -e MODEL_PROVIDER="custom" \                                               # Provider type: "custom" for OpenAI-compatible endpoints
-  -v hermes_data:/opt/data \                                                 # Persist memory data to a named volume (survives container restarts)
-  agentmemory/hermes-memory:latest                                           # Official image, supports linux/amd64 and linux/arm64
+# ============ Configuration Parameters ============
+# MODEL_API_KEY    LLM API key (required) — replace with your own credential
+# MODEL_BASE_URL   LLM endpoint, defaults to Tencent Cloud LKE (Large Model Knowledge Engine)
+# MODEL_NAME       Model name, defaults to DeepSeek-V3.2
+# MODEL_PROVIDER   Provider type: "custom" works for any OpenAI-compatible endpoint
+
+MODEL_API_KEY="your-api-key"
+MODEL_BASE_URL="https://api.lkeap.cloud.tencent.com/v1"
+MODEL_NAME="deepseek-v3.2"
+MODEL_PROVIDER="custom"
+
+# ============ docker run Flags ============
+# -d                          Run container in detached (background) mode
+# --name hermes-memory        Container name, for later docker exec / logs / stop
+# --restart unless-stopped    Auto-restart on crash or host reboot
+# -p 8420:8420                Host port ↔ container port (Hermes Gateway)
+# -e MODEL_*                  Inject the config parameters above as env vars
+# -v hermes_data:/opt/data    Persist memory data to a named volume (survives restart)
+
+docker run -d \
+  --name hermes-memory \
+  --restart unless-stopped \
+  -p 8420:8420 \
+  -e MODEL_API_KEY="$MODEL_API_KEY" \
+  -e MODEL_BASE_URL="$MODEL_BASE_URL" \
+  -e MODEL_NAME="$MODEL_NAME" \
+  -e MODEL_PROVIDER="$MODEL_PROVIDER" \
+  -v hermes_data:/opt/data \
+  agentmemory/hermes-memory:latest
 ```
 
-The image supports `linux/amd64` and `linux/arm64`. It ships with Tencent Cloud DeepSeek-V3.2 defaults — to use a different model, pass `MODEL_BASE_URL`, `MODEL_NAME`, and `MODEL_PROVIDER` accordingly.
+The image supports both `linux/amd64` and `linux/arm64`. It ships with Tencent Cloud DeepSeek-V3.2 as the default configuration; to use a custom model, simply override `MODEL_BASE_URL`, `MODEL_NAME`, and `MODEL_PROVIDER`.
 
 Verify:
 
 ```bash
-curl http://localhost:8420/health          # Check Gateway health endpoint, expect HTTP 200 + {"status":"ok"}
-docker exec -it hermes-memory hermes       # Enter interactive Hermes REPL inside the running container
+curl http://localhost:8420/health          # Check Gateway status
+docker exec -it hermes-memory hermes       # Enter Hermes chat REPL
 ```
 
 ---
+
 
 ## 🔧 Configurable Parameters
 
@@ -236,7 +256,7 @@ docker exec -it hermes-memory hermes       # Enter interactive Hermes REPL insid
 <details>
 <summary><b>🔴 Level 3 · Full parameter reference</b> (ops / custom models / remote embedding)</summary>
 
-For all fields, types, and constraints see [`openclaw.plugin.json`](./openclaw.plugin.json) and [`CONFIGURATION.md`](./CONFIGURATION.md).
+For all fields, types, and constraints see [`openclaw.plugin.json`](./openclaw.plugin.json)。
 
 - `embedding.*` — remote embedding service (OpenAI-compatible API)
 - `llm.*` — standalone LLM mode (bypass OpenClaw's built-in model and run L1/L2/L3 with a designated API)
