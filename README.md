@@ -115,7 +115,7 @@ graph LR
       <video src="https://github.com/user-attachments/assets/09c64a2c-9997-42c0-90a3-a15e250cfa43" controls="controls" muted="muted" style="max-width: 100%;"></video>
     </td>
     <td width="50%" valign="middle">
-      <video src="https://github.com/user-attachments/assets/7b499982-3572-474f-b179-3b42eb94a638" controls="controls" muted="muted" style="max-width: 100%;"></video>
+      <video src="https://github.com/user-attachments/assets/69045512-e75f-4c84-99dd-52ffa6e9e317" controls="controls" muted="muted" style="max-width: 100%;"></video>
     </td>
   </tr>
   <tr align="center" valign="top">
