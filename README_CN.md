@@ -44,7 +44,6 @@
 
 ---
 
-
 ## 项目简介
 
 **Memory 不是为了让 AI 存下所有东西，而是为了让人不必重复所有事情。**
@@ -54,6 +53,10 @@
 TencentDB Agent Memory 帮助 Agent 学会你的流程、保留任务上下文、复用历史经验。但我们**拒绝暴力的历史堆砌**，也**抛弃不可逆的暴力摘要**。我们将记忆设计为一套极具层次感的系统，以**符号化记忆**解决单次长任务的信息过载，以**记忆分层**解决跨会话的经验沉淀。
 
 > **让 Agent 记住该记的，让人把注意力留给判断、创造和真正有价值的工作。**
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/7cbbb57a-ec81-4f92-b0bd-7f3c5d760c1e" width="200" alt="Agent Memory 微信社群二维码" /><br/>
+  <sub>📱 扫码加入 <b>Agent Memory 微信社群</b>，与早期开发者直接对话
 
 ---
 
