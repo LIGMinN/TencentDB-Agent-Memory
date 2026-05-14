@@ -148,7 +148,7 @@ openclaw gateway restart
   "memory-tencentdb": {
     "enabled": true
   }
-}wowo
+}
 ```
 
 启用后，TencentDB Agent Memory 会自动完成对话录制、记忆提取、场景归纳、用户画像生成和下一轮对话前召回。
